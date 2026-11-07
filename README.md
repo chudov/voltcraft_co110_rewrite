@@ -19,7 +19,12 @@ Restore the original firmware at any time (keep co110_flash_full.bin!):
   `dir %ZEPHYR_BASE%\dts\arm\st\l4\stm32l431*` and fix the include in `co110.dts`.
 * anything else: send me the first error lines.
 
-## Two applications in one project
+## Applications in one project (Kconfig choice, default = live)
+* default: **live display** (`src/live.c`): CM1106S CO2 (USART1) and SHT30 temperature/humidity (I2C2) on the LCD,
+  chart of the last 17 samples (5 s steps), zone LEDs. DOWN: next chart quantity, MENU: degC/degF.
+* demo: build with `-- -DCONFIG_APP_DEMO=y`; bit-map test: `-- -DCONFIG_APP_BITMAP_TEST=y` (use `-p always` when switching).
+
+## Older notes (demo / test)
 * default: **display demo** (`src/demo.c`): draws a main screen with synthetic data using the
   drawing layer `src/display.c` and the measured segment map `src/lcd_map.h`.
   UP zoom, DOWN quantity (CO2/RH/temp), MENU next underline, ENTER mute icon, ENTER long preset.
@@ -32,6 +37,11 @@ Restore the original firmware at any time (keep co110_flash_full.bin!):
 See the comment at the top of `src/main.c` (keys, LED coding, beeps).
 Result to record: for every lit segment on the glass, the (byte, bit) shown by the LEDs.
 
+## Project rule: debug in sleep
+Every firmware on this board must allow debugging in sleep. It is done once for all
+applications in `boards/voltcraft/co110/board.c` (SYS_INIT before the kernel starts) and
+again at the start of `main()` (`src/dbg.h`). Never remove it: NRST is not reachable on the CO-110.
+
 ## If the ST-Link cannot connect any more ("Unable to get core ID")
 Cause: the running Zephyr image sleeps (WFI) in its idle thread and the debug port is
 not kept alive in sleep. The fixed firmware (`src/dbg.h`) enables debug in low-power modes,
@@ -39,7 +49,7 @@ but the image that is already on the chip has to be removed first. Nothing is da
 the original firmware is in co110_flash_full.bin.
 
 1. Check wires (SWDIO PA13, SWCLK PA14, GND, 3V3) and power-cycle the device.
-2. If NRST is wired to the ST-Link (pin 7 of the MCU):
+2. Only if NRST can be wired to the ST-Link (pin 7 of the MCU, not possible on the CO-110 so far):
 
        STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst freq=480 -e all
 

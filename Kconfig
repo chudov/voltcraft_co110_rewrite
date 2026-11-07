@@ -1,6 +1,18 @@
 mainmenu "CO-110"
 
+choice APP_VARIANT
+	prompt "Application"
+	default APP_LIVE
+
+config APP_LIVE
+	bool "Live display of the SHT30 and CM1106S sensors"
+
+config APP_DEMO
+	bool "Display demo with synthetic data"
+
 config APP_BITMAP_TEST
-	bool "Build the LCD bit-map test instead of the display demo"
+	bool "LCD bit-map test"
+
+endchoice
 
 source "Kconfig.zephyr"
