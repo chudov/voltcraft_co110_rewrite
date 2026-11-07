@@ -19,7 +19,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include "lcd.h"
-#include "dbg.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
@@ -77,7 +76,6 @@ static void out_init(const struct gpio_dt_spec *p, int level)
 
 int main(void)
 {
-	debug_in_low_power();
 	/* board state like the original firmware after MX_GPIO_Init */
 	out_init(&buzzer, 0);
 	out_init(&sensor_power, 0);   /* sensor not needed for this test */

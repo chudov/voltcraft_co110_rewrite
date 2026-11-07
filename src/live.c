@@ -11,7 +11,6 @@
 #include "lcd.h"
 #include "display.h"
 #include "sensors.h"
-#include "dbg.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
@@ -67,7 +66,6 @@ static int c_to_f_tenths(int c_tenths)
 
 int main(void)
 {
-	debug_in_low_power();
 
 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_ACTIVE);

@@ -1,25 +1,17 @@
+/*
+ * SHT30 temperature/humidity through Zephyr's standard sensor driver
+ * (compatible "sensirion,sht3xd", node `sht30` on I2C2 at 0x44). The driver does the
+ * single-shot measurement and checks both CRC bytes.
+ */
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/sensor.h>
 #include "sensors.h"
 
-#define SHT30_ADDR 0x44
-
+static const struct device *const sht = DEVICE_DT_GET(DT_NODELABEL(sht30));
 static const struct device *const i2c = DEVICE_DT_GET(DT_NODELABEL(i2c2));
-
-static uint8_t crc8(const uint8_t *d, int n)
-{
-	uint8_t crc = 0xFF;
-
-	for (int i = 0; i < n; i++) {
-		crc ^= d[i];
-		for (int b = 0; b < 8; b++) {
-			crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
-		}
-	}
-	return crc;
-}
 
 void sht30_recover_bus(void)
 {
@@ -28,30 +20,29 @@ void sht30_recover_bus(void)
 
 int sht30_measure(int *temp_tenths, int *rh_percent)
 {
-	static const uint8_t cmd[2] = { 0x2C, 0x06 };
-	uint8_t b[6];
+	struct sensor_value t, h;
 	int ret;
 
-	if (!device_is_ready(i2c)) {
+	if (!device_is_ready(sht)) {
 		return -ENODEV;
 	}
-	ret = i2c_write(i2c, cmd, sizeof(cmd), SHT30_ADDR);
+	ret = sensor_sample_fetch(sht);
 	if (ret != 0) {
 		return ret;
 	}
-	k_msleep(20); /* high repeatability needs at most 15.5 ms */
-	ret = i2c_read(i2c, b, sizeof(b), SHT30_ADDR);
+	ret = sensor_channel_get(sht, SENSOR_CHAN_AMBIENT_TEMP, &t);
 	if (ret != 0) {
 		return ret;
 	}
-	if (crc8(&b[0], 2) != b[2] || crc8(&b[3], 2) != b[5]) {
-		return -EIO;
+	ret = sensor_channel_get(sht, SENSOR_CHAN_HUMIDITY, &h);
+	if (ret != 0) {
+		return ret;
 	}
 
-	int32_t rt = (b[0] << 8) | b[1];
-	int32_t rr = (b[3] << 8) | b[4];
+	int64_t mt = sensor_value_to_milli(&t); /* milli degC */
+	int64_t mh = sensor_value_to_milli(&h); /* milli %RH */
 
-	*temp_tenths = (rt * 1750 + 32767) / 65535 - 450; /* -45 + 175 * raw / 65535, in 0.1 degC */
-	*rh_percent = (rr * 100 + 32767) / 65535;
+	*temp_tenths = (int)((mt + (mt >= 0 ? 50 : -50)) / 100);
+	*rh_percent = (int)((mh + 500) / 1000);
 	return 0;
 }

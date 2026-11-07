@@ -10,7 +10,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include "lcd.h"
-#include "dbg.h"
 #include "display.h"
 
 #define U DT_PATH(zephyr_user)
@@ -32,7 +31,6 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 
 int main(void)
 {
-	debug_in_low_power();
 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);

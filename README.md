@@ -24,6 +24,8 @@ Restore the original firmware at any time (keep co110_flash_full.bin!):
   chart of the last 17 samples (5 s steps), zone LEDs. DOWN: next chart quantity, MENU: degC/degF.
 * demo: build with `-- -DCONFIG_APP_DEMO=y`; bit-map test: `-- -DCONFIG_APP_BITMAP_TEST=y` (use `-p always` when switching).
 
+SHT30 uses Zephyr's standard `sensirion,sht3xd` driver (node `sht30` in `co110.dts`, `CONFIG_SENSOR=y`).
+
 ## Older notes (demo / test)
 * default: **display demo** (`src/demo.c`): draws a main screen with synthetic data using the
   drawing layer `src/display.c` and the measured segment map `src/lcd_map.h`.
@@ -38,9 +40,8 @@ See the comment at the top of `src/main.c` (keys, LED coding, beeps).
 Result to record: for every lit segment on the glass, the (byte, bit) shown by the LEDs.
 
 ## Project rule: debug in sleep
-Every firmware on this board must allow debugging in sleep. It is done once for all
-applications in `boards/voltcraft/co110/board.c` (SYS_INIT before the kernel starts) and
-again at the start of `main()` (`src/dbg.h`). Never remove it: NRST is not reachable on the CO-110.
+Every firmware on this board must allow debugging in sleep. Verified working on the device:
+`CONFIG_DEBUG=y` and `CONFIG_PM_DEVICE=y` in `prj.conf` (the ST-Link can flash again).
 
 ## If the ST-Link cannot connect any more ("Unable to get core ID")
 Cause: the running Zephyr image sleeps (WFI) in its idle thread and the debug port is
