@@ -1,0 +1,6 @@
+board:
+  name: co110
+  full_name: Voltcraft CO-110 CO2 monitor
+  vendor: zephyr
+  socs:
+    - name: stm32l431xx

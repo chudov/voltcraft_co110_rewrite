@@ -1,0 +1,6 @@
+mainmenu "CO-110"
+
+config APP_BITMAP_TEST
+	bool "Build the LCD bit-map test instead of the display demo"
+
+source "Kconfig.zephyr"

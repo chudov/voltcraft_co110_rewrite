@@ -1,0 +1,11 @@
+identifier: co110
+name: Voltcraft CO-110
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 48
+flash: 256
+supported:
+  - gpio
