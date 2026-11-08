@@ -47,11 +47,11 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 #define POWER_OFF_MS 500
 #define STARTUP_MS 37000
 
-#define SHORT_TICKS 4      /* 40 ms, shorter touches are ignored */
-#define REPEAT_START 60    /* UP/DOWN auto repeat after 0.6 s ... */
-#define REPEAT_EVERY 4     /* ... every 40 ms */
-#define LONG_TICKS 600     /* MENU/ENTER long press: 6 s as measured on the original */
-#define COMBO_TICKS 100    /* UP + DOWN for dark mode: 1 s */
+#define SHORT_MS 40          /* shorter touches are ignored */
+#define REPEAT_START_MS 600  /* UP/DOWN auto repeat after 0.6 s ... */
+#define REPEAT_EVERY_MS 40   /* ... every 40 ms */
+#define LONG_MS 6000         /* MENU/ENTER long press: 6 s as measured on the original */
+#define COMBO_MS 1000        /* UP + DOWN for dark mode */
 
 #define BACKLIGHT_MS 63000
 #define CLICK_MS 50
@@ -132,10 +132,12 @@ int main(void)
 	cm1106_init();
 
 	int sht_fails = 0, co2_fails = 0;
-	int held[KB_COUNT] = { 0 };
+	int64_t down_at[KB_COUNT] = { -1, -1, -1, -1 };
+	int64_t next_repeat[KB_COUNT] = { 0 };
 	bool fired[KB_COUNT] = { false }; /* long press or auto repeat already used */
 	bool suppress[KB_COUNT] = { false };
-	int combo = 0;
+	int64_t combo_at = -1;
+	bool combo_done = false;
 
 	int64_t t0 = k_uptime_get();
 	int64_t next_co2 = t0 + 2000; /* give the sensor time to start */
@@ -153,7 +155,7 @@ int main(void)
 	while (1) {
 		int64_t now = k_uptime_get();
 
-		/* ---- keys ---- */
+		/* ---- keys (all timings measured with the clock, not with loop counts) ---- */
 		bool pressed[KB_COUNT];
 		enum ui_event ev[2 * KB_COUNT];
 		int nev = 0;
@@ -163,12 +165,16 @@ int main(void)
 		}
 		if (pressed[KB_UP] && pressed[KB_DOWN]) {
 			suppress[KB_UP] = suppress[KB_DOWN] = true;
-			if (++combo == COMBO_TICKS) {
+			if (combo_at < 0) {
+				combo_at = now;
+			} else if (!combo_done && now - combo_at >= COMBO_MS) {
+				combo_done = true;
 				leds_set_dark(!leds_is_dark());
 				wake_until = now + BACKLIGHT_MS;
 			}
 		} else {
-			combo = 0;
+			combo_at = -1;
+			combo_done = false;
 		}
 		for (int k = 0; k < KB_COUNT; k++) {
 			bool updown = (k == KB_UP || k == KB_DOWN);
@@ -176,23 +182,27 @@ int main(void)
 						k == KB_MENU ? EV_MENU : EV_ENTER;
 
 			if (pressed[k]) {
-				held[k]++;
+				if (down_at[k] < 0) {
+					down_at[k] = now;
+					next_repeat[k] = now + REPEAT_START_MS;
+				}
 				if (suppress[k]) {
 					continue;
 				}
-				if (updown && held[k] >= REPEAT_START &&
-				    (held[k] - REPEAT_START) % REPEAT_EVERY == 0) {
+				if (updown && now >= next_repeat[k]) {
 					fired[k] = true;
+					next_repeat[k] = now + REPEAT_EVERY_MS;
 					ev[nev++] = e_short;
-				} else if (!updown && held[k] == LONG_TICKS) {
+				} else if (!updown && !fired[k] && now - down_at[k] >= LONG_MS) {
 					fired[k] = true;
 					ev[nev++] = k == KB_MENU ? EV_MENU_LONG : EV_ENTER_LONG;
 				}
 			} else {
-				if (held[k] >= SHORT_TICKS && !fired[k] && !suppress[k]) {
+				if (down_at[k] >= 0 && now - down_at[k] >= SHORT_MS && !fired[k] &&
+				    !suppress[k]) {
 					ev[nev++] = e_short;
 				}
-				held[k] = 0;
+				down_at[k] = -1;
 				fired[k] = false;
 				suppress[k] = false;
 			}

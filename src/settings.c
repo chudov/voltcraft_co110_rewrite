@@ -4,7 +4,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
-#include <zephyr/fs/nvs.h>
+#include <zephyr/kvss/nvs.h>
 #include "settings.h"
 #include "alarm.h"
 
@@ -52,19 +52,19 @@ int settings_init(void)
 	int rc;
 
 	defaults();
-	fs.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
+	fs.flash_device = PARTITION_DEVICE(storage_partition);
 	if (!device_is_ready(fs.flash_device)) {
 		apply();
 		return -ENODEV;
 	}
-	fs.offset = FIXED_PARTITION_OFFSET(storage_partition);
+	fs.offset = PARTITION_OFFSET(storage_partition);
 	rc = flash_get_page_info_by_offs(fs.flash_device, fs.offset, &info);
 	if (rc != 0) {
 		apply();
 		return rc;
 	}
 	fs.sector_size = info.size;
-	fs.sector_count = FIXED_PARTITION_SIZE(storage_partition) / info.size;
+	fs.sector_count = PARTITION_SIZE(storage_partition) / info.size;
 	rc = nvs_mount(&fs);
 	if (rc != 0) {
 		apply();
