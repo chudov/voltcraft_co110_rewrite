@@ -24,6 +24,7 @@ void disp_rh(int percent);                      /* 0 .. 99 */
 /* chart and MIN/MAX numbers; values are CO2 ppm, RH % or tenths of a degree */
 void disp_chart(const int *values, int count, enum disp_quantity q,
 		bool fahrenheit, int selected_col, bool hide_selected);
+void disp_log_cursor(bool on);                  /* the left-right arrow symbol of the LOG screen */
 void disp_zoom(int zoom);                       /* 0: 5 s .. 3: 0.5 d per division */
 void disp_menu(int item);                       /* 0 = none, 1..6 = ALARM PLANT LOG CALI UNIT ADV */
 void disp_alarm(bool bell_visible, bool muted);

@@ -24,6 +24,7 @@
 #include "alarm.h"
 #include "settings.h"
 #include "ui.h"
+#include "history.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
@@ -58,21 +59,6 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 #define CLICK_LOCK_MS 200
 #define ALARM_ON_MS 100
 #define ALARM_OFF_MS 1000
-
-static void push_history(int co2, int rh, int tenths)
-{
-	for (int q = 0; q < 3; q++) {
-		for (int c = DISP_CHART_COLS - 1; c > 0; c--) {
-			ud.hist[q][c] = ud.hist[q][c - 1];
-		}
-	}
-	ud.hist[DISP_Q_CO2][0] = co2;
-	ud.hist[DISP_Q_RH][0] = rh;
-	ud.hist[DISP_Q_TEMP][0] = tenths;
-	if (ud.hist_count < DISP_CHART_COLS) {
-		ud.hist_count++;
-	}
-}
 
 static int clamp_rh(int v)
 {
@@ -129,6 +115,7 @@ int main(void)
 		return 0;
 	}
 	settings_init();
+	history_load();
 	cm1106_init();
 
 	int sht_fails = 0, co2_fails = 0;
@@ -269,7 +256,7 @@ int main(void)
 				alarm_req = req;
 				/* the chart only collects samples after the start-up sequence */
 				if (now - t0 >= STARTUP_MS && ud.th_valid) {
-					push_history(ppm, clamp_rh(ud.rh_raw + g_set.rh_offset),
+					history_push(ppm, clamp_rh(ud.rh_raw + g_set.rh_offset),
 						     ud.t_raw + g_set.temp_offset);
 				}
 			} else if (++co2_fails >= CO2_MAX_FAILS) {

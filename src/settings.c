@@ -81,3 +81,22 @@ int settings_init(void)
 	apply();
 	return 0;
 }
+
+bool storage_get(uint16_t id, void *buf, size_t len)
+{
+	return ready && nvs_read(&fs, id, buf, len) == (ssize_t)len;
+}
+
+void storage_put(uint16_t id, const void *buf, size_t len)
+{
+	if (ready) {
+		(void)nvs_write(&fs, id, buf, len);
+	}
+}
+
+void storage_delete(uint16_t id)
+{
+	if (ready) {
+		(void)nvs_delete(&fs, id);
+	}
+}

@@ -27,7 +27,7 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 ## Keys (live)
 | Key | Main screen | In the menu |
 |---|---|---|
-| UP | reserved (chart zoom, not implemented yet) | previous item / change value |
+| UP | next chart zoom (5 s, 5 min, 2 h, 12 h per division) | previous item / change value |
 | DOWN | next chart quantity (CO2, RH, temperature) | next item / change value |
 | MENU short | open menu | next item, after the last one leave; cancel an edit |
 | MENU long (6 s) | calibrate temperature and humidity offsets | - |
@@ -35,12 +35,12 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 | ENTER long (6 s) | factory reset (defaults) | in CALI: start the 250 s CO2 calibration countdown |
 | UP + DOWN, 1 s | toggle dark mode (LEDs dimmed by software PWM, duty in `src/leds.c`) | |
 
-Menu items: 1 ALARM (UP/DOWN on/off), 2 PLANT (preset 0..9), 3 LOG (not implemented yet),
+Menu items: 1 ALARM (UP/DOWN on/off), 2 PLANT (preset 0..9), 3 LOG (UP/DOWN select a sample, blinking in the chart, ENTER next quantity),
 4 CALI, 5 degC/degF, 6 ADV (low/high CO2 threshold of preset 0 and 1, steps of 10 ppm).
 The first key on a dark screen only wakes the backlight. 60 s without a key leaves the menu.
 
 ## Storage
-Settings are kept with NVS in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
+Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with NVS in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
 Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
 
 ## Project rule: debug in sleep

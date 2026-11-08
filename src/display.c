@@ -221,6 +221,20 @@ void disp_chart(const int *values, int count, enum disp_quantity q,
 	lcd_set(LCD_SYM_RH_TOP, q == DISP_Q_RH);
 	lcd_set(LCD_SYM_TEMP_TOP, q == DISP_Q_TEMP);
 
+	if (count == 0) { /* nothing to show: no MIN / MAX */
+		for (int i = 0; i < 3; i++) {
+			put_char(lcd_digits_min[i], ' ', false);
+			put_char(lcd_digits_max[i], ' ', false);
+		}
+		lcd_set(LCD_MIN_ONE, false);
+		lcd_set(LCD_MAX_ONE, false);
+		lcd_set(LCD_MIN_X10, false);
+		lcd_set(LCD_MAX_X10, false);
+		lcd_set(LCD_SYM_MINMAX_ARROWS, false);
+		lcd_set(LCD_SYM_PPM_TOP, q == DISP_Q_CO2);
+		return;
+	}
+
 	/* MIN / MAX numbers and their unit markers */
 	put_minmax(lcd_digits_min, vmin, q, LCD_MIN_X10, LCD_MIN_ONE);
 	put_minmax(lcd_digits_max, vmax, q, LCD_MAX_X10, LCD_MAX_ONE);
@@ -230,6 +244,11 @@ void disp_chart(const int *values, int count, enum disp_quantity q,
 	lcd_set(LCD_MM_DEG, q == DISP_Q_TEMP);
 	lcd_set(LCD_MM_C_D, q == DISP_Q_TEMP && !fahrenheit);
 	lcd_set(LCD_MM_F_G, q == DISP_Q_TEMP && fahrenheit);
+}
+
+void disp_log_cursor(bool on)
+{
+	lcd_set(LCD_SYM_ARROWS_LR, on);
 }
 
 void disp_zoom(int z)

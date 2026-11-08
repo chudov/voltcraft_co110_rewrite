@@ -7,12 +7,13 @@
 #include "settings.h"
 #include "alarm.h"
 #include "lcd.h"
+#include "history.h"
 
 #define MENU_TIMEOUT_MS 60000
 #define CALI_SECONDS 250
 #define ITEM_COUNT 6
 
-enum ui_state { UI_MAIN, UI_MENU, UI_ALARM, UI_PLANT, UI_CALI, UI_UNIT, UI_ADV, UI_OFFSET };
+enum ui_state { UI_MAIN, UI_MENU, UI_ALARM, UI_PLANT, UI_LOG, UI_CALI, UI_UNIT, UI_ADV, UI_OFFSET };
 
 struct ui_data ud;
 
@@ -22,6 +23,8 @@ static int edit_val;
 static int edit_phase;
 static int adv_low;
 static int quantity = DISP_Q_CO2;
+static int zoom;   /* chart level 0..3: 5 s, 5 min, 2 h, 12 h per division */
+static int sel;    /* selected column in the LOG screen, 0 = newest */
 static int64_t last_input;
 static bool cali_running;
 static bool cali_due;
@@ -54,6 +57,10 @@ static bool open_item(void)
 		st = UI_PLANT;
 		edit_val = g_set.preset;
 		return true;
+	case 3:
+		st = UI_LOG;
+		sel = 0;
+		return true;
 	case 4:
 		st = UI_CALI;
 		cali_running = false;
@@ -70,7 +77,7 @@ static bool open_item(void)
 			return true;
 		}
 		return false;
-	default: /* 3 = LOG, not implemented yet */
+	default:
 		return false;
 	}
 }
@@ -98,9 +105,14 @@ bool ui_event(enum ui_event ev, int64_t now)
 		}
 		if (ev == EV_ENTER_LONG) {
 			settings_factory_reset();
+			history_clear();
 			return true;
 		}
-		return false; /* UP is reserved for the chart zoom */
+		if (ev == EV_UP) {
+			zoom = (zoom + 1) % 4;
+			return true;
+		}
+		return false;
 
 	case UI_MENU:
 		if (ev == EV_UP) {
@@ -156,6 +168,28 @@ bool ui_event(enum ui_event ev, int64_t now)
 			return true;
 		}
 		return false;
+
+	case UI_LOG: {
+		int n = ud.hist_count[zoom] > 0 ? ud.hist_count[zoom] : 1;
+
+		if (ev == EV_UP) {          /* towards older samples (left) */
+			sel = (sel + 1) % n;
+			return true;
+		}
+		if (ev == EV_DOWN) {        /* towards newer samples (right) */
+			sel = (sel + n - 1) % n;
+			return true;
+		}
+		if (ev == EV_ENTER) {       /* next quantity */
+			quantity = (quantity + 1) % 3;
+			return true;
+		}
+		if (ev == EV_MENU) {
+			st = UI_MAIN;
+			return true;
+		}
+		return false;
+	}
 
 	case UI_UNIT:
 		if (ev == EV_UP || ev == EV_DOWN) {
@@ -327,20 +361,38 @@ void ui_render(int64_t now)
 		disp_rh(rh_corrected());
 	}
 
-	/* chart */
-	for (int c = 0; c < ud.hist_count; c++) {
-		int v = ud.hist[quantity][c];
+	/* chart of the selected zoom level */
+	for (int c = 0; c < ud.hist_count[zoom]; c++) {
+		int v = ud.hist[zoom][quantity][c];
 
 		chart[c] = (quantity == DISP_Q_TEMP && unit) ? c_to_f(v) : v;
 	}
-	disp_chart(chart, ud.hist_count, quantity, unit, -1, false);
-	disp_zoom(0);
+	disp_chart(chart, ud.hist_count[zoom], quantity, unit, st == UI_LOG ? sel : -1,
+		   st == UI_LOG && blink);
+	disp_zoom(zoom);
+
+	/* LOG: show the selected sample in the field of the chosen quantity */
+	if (st == UI_LOG) {
+		disp_log_cursor(true);
+		if (sel < ud.hist_count[zoom]) {
+			int v = chart[sel];
+
+			if (quantity == DISP_Q_CO2) {
+				disp_co2(v, DISP_CO2_VALUE);
+			} else if (quantity == DISP_Q_RH) {
+				disp_rh(v);
+			} else {
+				disp_temp(v, unit);
+			}
+		}
+	}
 
 	/* menu underline, alarm bell, mode pictograms */
 	switch (st) {
 	case UI_MENU:  menu_line = item; break;
 	case UI_ALARM: menu_line = 1; break;
 	case UI_PLANT: menu_line = 2; break;
+	case UI_LOG:   menu_line = 3; break;
 	case UI_CALI:  menu_line = 4; break;
 	case UI_UNIT:  menu_line = 5; break;
 	case UI_ADV:   menu_line = 6; break;

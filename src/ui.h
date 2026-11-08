@@ -15,8 +15,8 @@ struct ui_data {
 	int t_raw;   /* 0.1 degC, without offset */
 	int rh_raw;  /* %, without offset */
 	bool th_valid;
-	int hist[3][DISP_CHART_COLS]; /* [quantity][0 = newest] */
-	int hist_count;
+	int hist[4][3][DISP_CHART_COLS]; /* [level][quantity][0 = newest], see history.h */
+	int hist_count[4];
 };
 
 extern struct ui_data ud;

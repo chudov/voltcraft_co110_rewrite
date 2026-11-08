@@ -1,6 +1,8 @@
 #ifndef SETTINGS_H_
 #define SETTINGS_H_
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define SETTINGS_MAGIC 0xC0A1
@@ -23,5 +25,10 @@ extern struct settings g_set;
 int settings_init(void);
 void settings_save(void);
 void settings_factory_reset(void);
+
+/* raw access to the NVS storage for other modules (history); ids 1 = settings, 10..13 = history */
+bool storage_get(uint16_t id, void *buf, size_t len);
+void storage_put(uint16_t id, const void *buf, size_t len);
+void storage_delete(uint16_t id);
 
 #endif
