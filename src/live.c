@@ -13,7 +13,10 @@
  *   DOWN          next chart quantity (CO2, RH, temperature)
  *   MENU          switch degC / degF
  *   UP + DOWN     hold 1 s: toggle dark mode (LEDs dimmed by software PWM)
- * LEDs: zone of the human preset (< 800 green, < 1200 yellow, otherwise red).
+ * LEDs and alarm: zone of the selected preset (default 0 = human: < 800 green, < 1200 yellow,
+ * otherwise red + repeating alarm beep 100 ms / 1 s). Every accepted key gives a 50 ms click and
+ * silences the alarm until the next CO2 reading. The backlight stays on for 63 s after a key
+ * press (the first press on a dark screen only wakes it) and while an alarm is active.
  * Schedule like the original firmware: SHT30 every 4 s, CM1106S every 5 s (which is
  * also the chart sample period); the CM1106S is power cycled after 40 failed polls.
  */
@@ -23,6 +26,7 @@
 #include "display.h"
 #include "sensors.h"
 #include "leds.h"
+#include "alarm.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
@@ -46,8 +50,11 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 #define POWER_OFF_MS 500
 #define COMBO_TICKS 100 /* UP + DOWN held for 1 s */
 
-#define THRESH_LOW 800  /* human preset 0 */
-#define THRESH_HIGH 1200
+#define BACKLIGHT_MS 63000
+#define CLICK_MS 50
+#define CLICK_LOCK_MS 200
+#define ALARM_ON_MS 100
+#define ALARM_OFF_MS 1000
 
 static int hist[3][DISP_CHART_COLS]; /* [quantity][0 = newest] */
 static int hist_count;
@@ -73,8 +80,11 @@ static int c_to_f_tenths(int c_tenths)
 }
 
 /* start-up screen, returns true while the start-up sequence is running */
-static bool startup_screen(int64_t elapsed_ms)
+static bool startup_screen(int64_t elapsed_ms, int preset)
 {
+	int th_low, th_high;
+
+	alarm_thresholds(preset, &th_low, &th_high);
 	disp_clear();
 
 	if (elapsed_ms < 2000) {
@@ -87,7 +97,7 @@ static bool startup_screen(int64_t elapsed_ms)
 
 		leds_set(elapsed_ms < 4000 ? LED_LD2 : (elapsed_ms < 5000 ? LED_LD3 :
 			 (elapsed_ms < 6000 ? LED_LD4 : LED_ALL)));
-		disp_co2(low ? THRESH_LOW : THRESH_HIGH, DISP_CO2_VALUE);
+		disp_co2(low ? th_low : th_high, DISP_CO2_VALUE);
 		if (low) {
 			disp_rh_text('L', '0');
 		} else {
@@ -106,8 +116,8 @@ static bool startup_screen(int64_t elapsed_ms)
 int main(void)
 {
 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_ACTIVE); /* start-up beep, off after 200 ms */
-	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
+	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
 	for (int i = 0; i < KB_COUNT; i++) {
@@ -135,15 +145,17 @@ int main(void)
 	int64_t co2_reply_at = 0;
 	int64_t power_on_at = 0;
 	bool co2_pending = false;
-	bool beeping = true;
+	int preset = 0;
+	bool alarm_enabled = true;
+	bool alarm_req = false;
+	enum zone zone = ZONE_NONE;
+	int64_t wake_until = t0 + BACKLIGHT_MS;
+	int64_t click_end = 0, lock_end = 0, alarm_next = 0, alarm_beep_end = 0;
+	bool alarm_beeping = false;
+	bool bl_on = true;
 
 	while (1) {
 		int64_t now = k_uptime_get();
-
-		if (beeping && now - t0 >= 200) {
-			gpio_pin_set_dt(&buzzer, 0);
-			beeping = false;
-		}
 
 		/* keys: act on release of a short press; UP + DOWN held = dark mode */
 		bool pressed[KB_COUNT];
@@ -155,6 +167,7 @@ int main(void)
 			suppress[KB_UP] = suppress[KB_DOWN] = true;
 			if (++combo == COMBO_TICKS) {
 				leds_set_dark(!leds_is_dark());
+				wake_until = now + BACKLIGHT_MS;
 			}
 		} else {
 			combo = 0;
@@ -164,10 +177,16 @@ int main(void)
 				held[k]++;
 			} else {
 				if (held[k] > 2 && !suppress[k]) {
-					if (k == KB_DOWN) {
-						quantity = (quantity + 1) % 3;
-					} else if (k == KB_MENU) {
-						fahrenheit = !fahrenheit;
+					wake_until = now + BACKLIGHT_MS;
+					if (bl_on) { /* first key on a dark screen only wakes it */
+						if (k == KB_DOWN) {
+							quantity = (quantity + 1) % 3;
+						} else if (k == KB_MENU) {
+							fahrenheit = !fahrenheit;
+						}
+						click_end = now + CLICK_MS;
+						lock_end = now + CLICK_LOCK_MS;
+						alarm_req = false; /* silence until the next reading */
 					}
 				}
 				held[k] = 0;
@@ -213,8 +232,11 @@ int main(void)
 				co2 = ppm;
 				co2_valid = true;
 				co2_fails = 0;
+				zone = alarm_evaluate(co2, preset, &alarm_req);
 			} else if (++co2_fails >= CO2_MAX_FAILS) {
 				co2_valid = false;
+				zone = ZONE_NONE;
+				alarm_req = false;
 				co2_fails = CO2_MAX_FAILS;
 				gpio_pin_set_dt(&sensor_power, 0); /* power cycle the sensor */
 				power_on_at = now + POWER_OFF_MS;
@@ -225,15 +247,36 @@ int main(void)
 			}
 		}
 
-		if (startup_screen(now - t0)) {
+		/* buzzer: start-up beep, key click, repeating alarm */
+		bool alarm_active = alarm_req && alarm_enabled;
+		bool buz = (now - t0) < 200 || now < click_end;
+
+		if (!alarm_active) {
+			alarm_beeping = false;
+		} else if (now >= lock_end) {
+			if (!alarm_beeping && now >= alarm_next) {
+				alarm_beeping = true;
+				alarm_beep_end = now + ALARM_ON_MS;
+			} else if (alarm_beeping && now >= alarm_beep_end) {
+				alarm_beeping = false;
+				alarm_next = now + ALARM_OFF_MS;
+			}
+			buz = buz || alarm_beeping;
+		}
+		gpio_pin_set_dt(&buzzer, buz);
+
+		/* backlight */
+		bl_on = now < wake_until || alarm_active;
+		gpio_pin_set_dt(&backlight, bl_on);
+
+		if (startup_screen(now - t0, preset)) {
 			k_msleep(TICK_MS);
 			continue;
 		}
 
-		/* zone LEDs (human preset 0) */
-		leds_set((co2_valid && co2 < THRESH_LOW ? LED_LD4 : 0) |
-			 (co2_valid && co2 >= THRESH_LOW && co2 < THRESH_HIGH ? LED_LD3 : 0) |
-			 (co2_valid && co2 >= THRESH_HIGH ? LED_LD2 : 0) | LED_LD1);
+		/* zone LEDs */
+		leds_set((zone == ZONE_OK ? LED_LD4 : 0) | (zone == ZONE_WARN ? LED_LD3 : 0) |
+			 (zone == ZONE_ALERT ? LED_LD2 : 0) | LED_LD1);
 
 		/* display */
 		int shown_t = fahrenheit ? c_to_f_tenths(tenths) : tenths;
@@ -259,8 +302,8 @@ int main(void)
 		}
 		disp_chart(chart, hist_count, quantity, fahrenheit, -1, false);
 		disp_zoom(0);
-		disp_alarm(true, false);
-		disp_preset(0);
+		disp_alarm(true, !alarm_enabled);
+		disp_preset(preset);
 		lcd_flush();
 
 		k_msleep(TICK_MS);

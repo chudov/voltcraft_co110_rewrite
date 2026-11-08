@@ -24,6 +24,8 @@ Restore the original firmware at any time (keep co110_flash_full.bin!):
   chart of the last 17 samples (5 s steps), zone LEDs, 37 s start-up sequence (30 s countdown),
   dark mode (UP + DOWN held for 1 s, software PWM `src/leds.c`, duty in `DARK_DUTY`).
   DOWN: next chart quantity, MENU: degC/degF.
+  Alarm logic (`src/alarm.c`, thresholds/zones of the original), key click, repeating alarm beep,
+  backlight timeout 63 s (first key on a dark screen only wakes it).
 * demo: build with `-- -DCONFIG_APP_DEMO=y`; bit-map test: `-- -DCONFIG_APP_BITMAP_TEST=y` (use `-p always` when switching).
 
 SHT30 uses Zephyr's standard `sensirion,sht3xd` driver (node `sht30` in `co110.dts`, `CONFIG_SENSOR=y`).
@@ -43,11 +45,7 @@ Result to record: for every lit segment on the glass, the (byte, bit) shown by t
 
 ## Project rule: debug in sleep
 Every firmware on this board must allow debugging in sleep. Verified working on the device:
-`CONFIG_DEBUG=y` and `CONFIG_PM_DEVICE=y` in `prj.conf` (the ST-Link can flash again). `board.c` and
-`co110_defconfig` carry additional safety nets. Never remove it: NRST is not reachable on the CO-110.
-
-The board also keeps the CPU out of WFI with a lowest-priority spinning thread (`board.c`) and sets
-`CONFIG_STM32_ENABLE_DEBUG_SLEEP_STOP=y` in `co110_defconfig`.
+`CONFIG_DEBUG=y` and `CONFIG_PM_DEVICE=y` in `prj.conf` (the ST-Link can flash again).
 
 ## If the ST-Link cannot connect any more ("Unable to get core ID")
 Cause: the running Zephyr image sleeps (WFI) in its idle thread and the debug port is
