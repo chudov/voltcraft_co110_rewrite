@@ -55,6 +55,20 @@
 	};
 };
 
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* last 32 KB (16 pages of 2 KB): settings and trend logs (NVS) */
+		storage_partition: partition@38000 {
+			label = "storage";
+			reg = <0x00038000 DT_SIZE_K(32)>;
+		};
+	};
+};
+
 &clk_lsi {
 	status = "okay";
 };

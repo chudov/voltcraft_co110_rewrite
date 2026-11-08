@@ -96,6 +96,27 @@ void disp_co2_countdown(int n)
 	lcd_set(LCD_SYM_M, true);
 }
 
+void disp_blank_co2(void)
+{
+	for (int i = 0; i < 4; i++) {
+		put_char(lcd_digits_co2[i], ' ', false);
+	}
+}
+
+void disp_blank_temp(void)
+{
+	for (int i = 0; i < 3; i++) {
+		put_char(lcd_digits_temp[i], ' ', false);
+	}
+}
+
+void disp_blank_rh(void)
+{
+	for (int i = 0; i < 2; i++) {
+		put_char(lcd_digits_rh[i], ' ', false);
+	}
+}
+
 void disp_rh_text(char left, char right)
 {
 	put_char(lcd_digits_rh[0], left, false);

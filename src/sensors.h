@@ -14,4 +14,7 @@ void cm1106_request(void);
 /* parse what has been received since the request; true and *ppm when a valid frame was found */
 bool cm1106_get_result(int *ppm);
 
+/* zero point calibration to a reference value (400 ppm in fresh air); blocks up to ~0.6 s */
+bool cm1106_calibrate(int ppm);
+
 #endif

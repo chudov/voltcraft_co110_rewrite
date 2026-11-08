@@ -1,5 +1,7 @@
 #VSCode local configuration
 .vscode/
+*.code-workspace
+
 # Cache files, generates by Zephir
 .temp/
 .libs/

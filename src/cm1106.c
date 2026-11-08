@@ -72,3 +72,36 @@ bool cm1106_get_result(int *ppm)
 	}
 	return false;
 }
+
+bool cm1106_calibrate(int ppm)
+{
+	uint8_t f[6] = { 0x11, 0x03, 0x03, (uint8_t)(ppm >> 8), (uint8_t)ppm, 0 };
+	uint8_t sum = 0;
+
+	for (int i = 0; i < 5; i++) {
+		sum += f[i];
+	}
+	f[5] = (uint8_t)(0x100 - sum);
+
+	for (int attempt = 0; attempt < 10; attempt++) {
+		rx_tail = rx_head;
+		for (int i = 0; i < 6; i++) {
+			uart_poll_out(uart, f[i]);
+		}
+		k_msleep(50);
+
+		uint8_t r[RX_SIZE];
+		int n = 0;
+
+		while (rx_tail != rx_head && n < RX_SIZE) {
+			r[n++] = rx_buf[rx_tail % RX_SIZE];
+			rx_tail++;
+		}
+		for (int i = 0; i + 4 <= n; i++) {
+			if (r[i] == 0x16 && r[i + 1] == 0x01 && r[i + 2] == 0x03 && r[i + 3] == 0xE6) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
