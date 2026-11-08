@@ -1,3 +1,5 @@
+#VSCode local configuration
+.vscode/
 # Cache files, generates by Zephir
 .temp/
 .libs/

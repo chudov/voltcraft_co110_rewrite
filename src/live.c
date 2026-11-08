@@ -1,7 +1,18 @@
 /*
  * Live display: SHT30 (temperature, humidity) and CM1106S (CO2) on the LCD.
- *   DOWN   next chart quantity (CO2, RH, temperature)
- *   MENU   switch degC / degF
+ *
+ * Start-up like the original firmware (about 37 s):
+ *   0-2 s    all LCD segments and all LEDs on, one 200 ms beep
+ *   2-3 s    LD1
+ *   3-5 s    LD2 / LD3, "Lo" and the low CO2 threshold
+ *   5-7 s    LD4 / all LEDs, "Hi" and the high CO2 threshold
+ *   7-37 s   LEDs off, 30 s countdown in the CO2 digits (sensors already run)
+ * then the main screen.
+ *
+ * Keys on the main screen:
+ *   DOWN          next chart quantity (CO2, RH, temperature)
+ *   MENU          switch degC / degF
+ *   UP + DOWN     hold 1 s: toggle dark mode (LEDs dimmed by software PWM)
  * LEDs: zone of the human preset (< 800 green, < 1200 yellow, otherwise red).
  * Schedule like the original firmware: SHT30 every 4 s, CM1106S every 5 s (which is
  * also the chart sample period); the CM1106S is power cycled after 40 failed polls.
@@ -11,6 +22,7 @@
 #include "lcd.h"
 #include "display.h"
 #include "sensors.h"
+#include "leds.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
@@ -21,17 +33,9 @@ static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
 static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
 
-/* LD4 green, LD3 yellow, LD2 red, LD1 power */
-static const struct gpio_dt_spec leds[4] = {
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_green), gpios),
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_yellow), gpios),
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_red), gpios),
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_power), gpios),
-};
-
-enum { KB_DOWN, KB_MENU, KB_COUNT };
+enum { KB_UP, KB_DOWN, KB_MENU, KB_COUNT };
 static const struct gpio_dt_spec keys[KB_COUNT] = {
-	GPIO_OUT(down_gpios), GPIO_OUT(menu_gpios),
+	GPIO_OUT(up_gpios), GPIO_OUT(down_gpios), GPIO_OUT(menu_gpios),
 };
 
 #define TICK_MS 10
@@ -40,6 +44,10 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 #define CO2_REPLY_WAIT_MS 300
 #define CO2_MAX_FAILS 40
 #define POWER_OFF_MS 500
+#define COMBO_TICKS 100 /* UP + DOWN held for 1 s */
+
+#define THRESH_LOW 800  /* human preset 0 */
+#define THRESH_HIGH 1200
 
 static int hist[3][DISP_CHART_COLS]; /* [quantity][0 = newest] */
 static int hist_count;
@@ -64,25 +72,53 @@ static int c_to_f_tenths(int c_tenths)
 	return c_tenths * 9 / 5 + 320;
 }
 
+/* start-up screen, returns true while the start-up sequence is running */
+static bool startup_screen(int64_t elapsed_ms)
+{
+	disp_clear();
+
+	if (elapsed_ms < 2000) {
+		lcd_fill(0xFF);
+		leds_set(LED_ALL);
+	} else if (elapsed_ms < 3000) {
+		leds_set(LED_LD1);
+	} else if (elapsed_ms < 7000) {
+		bool low = elapsed_ms < 5000;
+
+		leds_set(elapsed_ms < 4000 ? LED_LD2 : (elapsed_ms < 5000 ? LED_LD3 :
+			 (elapsed_ms < 6000 ? LED_LD4 : LED_ALL)));
+		disp_co2(low ? THRESH_LOW : THRESH_HIGH, DISP_CO2_VALUE);
+		if (low) {
+			disp_rh_text('L', '0');
+		} else {
+			disp_rh_text('H', 'I');
+		}
+	} else if (elapsed_ms < 37000) {
+		leds_set(0);
+		disp_co2_countdown(30 - (int)((elapsed_ms - 7000) / 1000));
+	} else {
+		return false;
+	}
+	lcd_flush();
+	return true;
+}
+
 int main(void)
 {
-
-	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
+	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_ACTIVE); /* start-up beep, off after 200 ms */
 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
-	for (int i = 0; i < 4; i++) {
-		gpio_pin_configure_dt(&leds[i], GPIO_OUTPUT_INACTIVE);
-	}
 	for (int i = 0; i < KB_COUNT; i++) {
 		gpio_pin_configure_dt(&keys[i], GPIO_INPUT);
 	}
+	leds_init();
 	if (lcd_init() != 0) {
+		leds_set(LED_ALL);
 		return 0;
 	}
 	cm1106_init();
-	gpio_pin_set_dt(&leds[3], 1);
 
 	int co2 = 0, rh = 0, tenths = 0;
 	bool co2_valid = false, th_valid = false;
@@ -90,29 +126,52 @@ int main(void)
 	int quantity = DISP_Q_CO2;
 	bool fahrenheit = false;
 	int held[KB_COUNT] = { 0 };
+	bool suppress[KB_COUNT] = { false };
+	int combo = 0;
 
-	int64_t next_co2 = k_uptime_get() + 2000; /* give the sensor time to start */
-	int64_t next_sht = k_uptime_get() + 500;
+	int64_t t0 = k_uptime_get();
+	int64_t next_co2 = t0 + 2000; /* give the sensor time to start */
+	int64_t next_sht = t0 + 500;
 	int64_t co2_reply_at = 0;
 	int64_t power_on_at = 0;
 	bool co2_pending = false;
+	bool beeping = true;
 
 	while (1) {
 		int64_t now = k_uptime_get();
 
-		/* keys: act on release of a short press */
+		if (beeping && now - t0 >= 200) {
+			gpio_pin_set_dt(&buzzer, 0);
+			beeping = false;
+		}
+
+		/* keys: act on release of a short press; UP + DOWN held = dark mode */
+		bool pressed[KB_COUNT];
+
 		for (int k = 0; k < KB_COUNT; k++) {
-			if (gpio_pin_get_dt(&keys[k]) > 0) {
+			pressed[k] = gpio_pin_get_dt(&keys[k]) > 0;
+		}
+		if (pressed[KB_UP] && pressed[KB_DOWN]) {
+			suppress[KB_UP] = suppress[KB_DOWN] = true;
+			if (++combo == COMBO_TICKS) {
+				leds_set_dark(!leds_is_dark());
+			}
+		} else {
+			combo = 0;
+		}
+		for (int k = 0; k < KB_COUNT; k++) {
+			if (pressed[k]) {
 				held[k]++;
 			} else {
-				if (held[k] > 2) {
+				if (held[k] > 2 && !suppress[k]) {
 					if (k == KB_DOWN) {
 						quantity = (quantity + 1) % 3;
-					} else {
+					} else if (k == KB_MENU) {
 						fahrenheit = !fahrenheit;
 					}
 				}
 				held[k] = 0;
+				suppress[k] = false;
 			}
 		}
 
@@ -160,17 +219,21 @@ int main(void)
 				gpio_pin_set_dt(&sensor_power, 0); /* power cycle the sensor */
 				power_on_at = now + POWER_OFF_MS;
 			}
-			if (co2_valid && th_valid) {
+			/* the chart only collects samples after the start-up sequence */
+			if (now - t0 >= 37000 && co2_valid && th_valid) {
 				push_history(co2, rh, tenths);
 			}
 		}
 
-		/* zone LEDs (human preset 0 thresholds 800 / 1200) */
-		bool known = co2_valid;
+		if (startup_screen(now - t0)) {
+			k_msleep(TICK_MS);
+			continue;
+		}
 
-		gpio_pin_set_dt(&leds[0], known && co2 < 800);
-		gpio_pin_set_dt(&leds[1], known && co2 >= 800 && co2 < 1200);
-		gpio_pin_set_dt(&leds[2], known && co2 >= 1200);
+		/* zone LEDs (human preset 0) */
+		leds_set((co2_valid && co2 < THRESH_LOW ? LED_LD4 : 0) |
+			 (co2_valid && co2 >= THRESH_LOW && co2 < THRESH_HIGH ? LED_LD3 : 0) |
+			 (co2_valid && co2 >= THRESH_HIGH ? LED_LD2 : 0) | LED_LD1);
 
 		/* display */
 		int shown_t = fahrenheit ? c_to_f_tenths(tenths) : tenths;

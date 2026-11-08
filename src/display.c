@@ -79,6 +79,30 @@ void disp_co2(int ppm, enum disp_co2_mode mode)
 	lcd_set(LCD_SYM_M, true);
 }
 
+void disp_co2_countdown(int n)
+{
+	if (n < 0) {
+		n = 0;
+	}
+	if (n > 99) {
+		n = 99;
+	}
+	put_char(lcd_digits_co2[0], ' ', false);
+	put_char(lcd_digits_co2[1], n >= 10 ? '0' + n / 10 : ' ', false);
+	put_char(lcd_digits_co2[2], '0' + n % 10, false);
+	put_char(lcd_digits_co2[3], ' ', false);
+	lcd_set(LCD_SYM_CO2, true);
+	lcd_set(LCD_SYM_PP, true);
+	lcd_set(LCD_SYM_M, true);
+}
+
+void disp_rh_text(char left, char right)
+{
+	put_char(lcd_digits_rh[0], left, false);
+	put_char(lcd_digits_rh[1], right, false);
+	lcd_set(LCD_SYM_RH_PCT, true);
+}
+
 /* xx.x in three digits, '-' in the left digit for negative values */
 static void put_tenths(const lcd_seg_t d[][8], int tenths)
 {
