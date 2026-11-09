@@ -24,6 +24,14 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 * **bit-map test** (`src/bitmap_test.c`): lights buffer bits one by one: `-- -DCONFIG_APP_BITMAP_TEST=y`
   (use `-p always` when switching the application).
 
+## Architecture (live)
+* UI thread = main (`src/live.c`, `src/ui.c`): waits for messages (`k_msgq`, `src/app.h`) with a 100 ms time-out;
+  owns the display, the UI state, the settings and the history; redraws the LCD only on change.
+* Sensor threads (`src/sensor_tasks.c`): SHT30 every 4 s, CM1106S every 5 s (power cycle after 40 failed polls,
+  400 ppm calibration on request of the UI).
+* Keys (`src/input.c`): GPIO edge interrupts start a work item that scans the keys while one is down.
+* Timers: 63 s backlight, 1.1 s alarm beep period; both post messages to the UI thread.
+
 ## Keys (live)
 | Key | Main screen | In the menu |
 |---|---|---|
