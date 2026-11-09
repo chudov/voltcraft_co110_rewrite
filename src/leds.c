@@ -1,65 +1,55 @@
-/*
- * LEDs with a software PWM (dark mode). A 100 us timer steps through 32 phases
- * (about 310 Hz); in dark mode every lit LED is on for DARK_DUTY[i] of the 32 phases.
- * Temporary solution, a hardware PWM solution may replace it later.
- */
+/* Application side of the LEDs: standard Zephyr LED API (driver: led_swpwm.c). */
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/led.h>
 #include "leds.h"
 
-#define PWM_STEPS 32
+#define LEDS_NODE DT_NODELABEL(leds)
+#define IDX(label) DT_NODE_CHILD_IDX(DT_NODELABEL(label))
 
-/* on-time out of 32 in dark mode, index = bit number (LD4, LD3, LD2, LD1) */
-static const uint8_t DARK_DUTY[4] = { 4, 4, 4, 4 };
+static const struct device *const led_dev = DEVICE_DT_GET(LEDS_NODE);
 
-static const struct gpio_dt_spec leds[4] = {
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_green), gpios),
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_yellow), gpios),
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_red), gpios),
-	GPIO_DT_SPEC_GET(DT_NODELABEL(led_power), gpios),
+/* LED API index of LD4, LD3, LD2, LD1 (bit order of leds_set) */
+static const uint8_t idx[4] = {
+	IDX(led_green), IDX(led_yellow), IDX(led_red), IDX(led_power),
 };
 
-static volatile unsigned int wanted;
-static volatile bool dark;
-static uint8_t step;
-static int8_t last[4] = { -1, -1, -1, -1 };
+/* brightness in percent of a lit LED in dark mode (4/32 = 12 %) */
+static const uint8_t DARK_PCT[4] = { 12, 12, 12, 12 };
 
-static void pwm_tick(struct k_timer *t)
+static unsigned int wanted;
+static bool dark;
+
+static void apply(void)
 {
-	ARG_UNUSED(t);
-
 	for (int i = 0; i < 4; i++) {
-		bool on = false;
+		uint8_t pct = (wanted & BIT(i)) ? (dark ? DARK_PCT[i] : 100) : 0;
 
-		if (wanted & BIT(i)) {
-			on = dark ? (step < DARK_DUTY[i]) : true;
-		}
-		if (last[i] != (int8_t)on) {
-			gpio_pin_set_dt(&leds[i], on);
-			last[i] = (int8_t)on;
-		}
+		(void)led_set_brightness(led_dev, idx[i], pct);
 	}
-	step = (step + 1) % PWM_STEPS;
 }
-
-K_TIMER_DEFINE(pwm_timer, pwm_tick, NULL);
 
 void leds_init(void)
 {
-	for (int i = 0; i < 4; i++) {
-		gpio_pin_configure_dt(&leds[i], GPIO_OUTPUT_INACTIVE);
-	}
-	k_timer_start(&pwm_timer, K_USEC(100), K_USEC(100));
+	wanted = 0;
+	apply();
 }
 
 void leds_set(unsigned int mask)
 {
-	wanted = mask & LED_ALL;
+	mask &= LED_ALL;
+	if (mask != wanted) {
+		wanted = mask;
+		apply();
+	}
 }
 
 void leds_set_dark(bool d)
 {
-	dark = d;
+	if (d != dark) {
+		dark = d;
+		apply();
+	}
 }
 
 bool leds_is_dark(void)

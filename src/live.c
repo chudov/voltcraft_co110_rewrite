@@ -17,6 +17,7 @@
  */
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/buzzer.h>
 #include "lcd.h"
 #include "display.h"
 #include "sensors.h"
@@ -32,7 +33,7 @@
 static const struct gpio_dt_spec backlight = GPIO_OUT(backlight_gpios);
 static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
 static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
-static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
+static const struct device *const buzzer = DEVICE_DT_GET(DT_NODELABEL(buzzer));
 static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
 
 enum { KB_UP, KB_DOWN, KB_MENU, KB_ENTER, KB_COUNT };
@@ -57,8 +58,8 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 #define BACKLIGHT_MS 63000
 #define CLICK_MS 50
 #define CLICK_LOCK_MS 200
-#define ALARM_ON_MS 100
-#define ALARM_OFF_MS 1000
+#define ALARM_BEEP_MS 100
+#define ALARM_PERIOD_MS 1100 /* 100 ms on, 1 s off */
 
 static int clamp_rh(int v)
 {
@@ -95,13 +96,12 @@ static bool startup_screen(int64_t elapsed_ms, int preset)
 	} else {
 		return false;
 	}
-	lcd_flush();
+	lcd_flush_if_changed();
 	return true;
 }
 
 int main(void)
 {
-	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_ACTIVE); /* start-up beep, off after 200 ms */
 	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
@@ -117,6 +117,7 @@ int main(void)
 	settings_init();
 	history_load();
 	cm1106_init();
+	buzzer_beep(buzzer, 200); /* start-up beep */
 
 	int sht_fails = 0, co2_fails = 0;
 	int64_t down_at[KB_COUNT] = { -1, -1, -1, -1 };
@@ -135,8 +136,7 @@ int main(void)
 
 	bool alarm_req = false;
 	int64_t wake_until = t0 + BACKLIGHT_MS;
-	int64_t click_end = 0, lock_end = 0, alarm_next = 0, alarm_beep_end = 0;
-	bool alarm_beeping = false;
+	int64_t lock_end = 0, alarm_next = 0;
 	bool bl_on = true;
 
 	while (1) {
@@ -200,7 +200,7 @@ int main(void)
 				continue; /* the first key on a dark screen only wakes it */
 			}
 			if (ui_event(ev[i], now)) {
-				click_end = now + CLICK_MS;
+				buzzer_beep(buzzer, CLICK_MS);
 				lock_end = now + CLICK_LOCK_MS;
 				alarm_req = false; /* silence until the next reading */
 			}
@@ -269,23 +269,13 @@ int main(void)
 			}
 		}
 
-		/* ---- buzzer: start-up beep, key click, repeating alarm ---- */
+		/* ---- repeating alarm beep (the buzzer API stops each beep by itself) ---- */
 		bool alarm_active = alarm_req && g_set.alarm_on;
-		bool buz = (now - t0) < 200 || now < click_end;
 
-		if (!alarm_active) {
-			alarm_beeping = false;
-		} else if (now >= lock_end) {
-			if (!alarm_beeping && now >= alarm_next) {
-				alarm_beeping = true;
-				alarm_beep_end = now + ALARM_ON_MS;
-			} else if (alarm_beeping && now >= alarm_beep_end) {
-				alarm_beeping = false;
-				alarm_next = now + ALARM_OFF_MS;
-			}
-			buz = buz || alarm_beeping;
+		if (alarm_active && now >= lock_end && now >= alarm_next) {
+			buzzer_beep(buzzer, ALARM_BEEP_MS);
+			alarm_next = now + ALARM_PERIOD_MS;
 		}
-		gpio_pin_set_dt(&buzzer, buz);
 
 		/* ---- backlight ---- */
 		bl_on = now < wake_until || alarm_active;
@@ -308,7 +298,7 @@ int main(void)
 			 (zone == ZONE_ALERT ? LED_LD2 : 0) | LED_LD1);
 
 		ui_render(now);
-		lcd_flush();
+		lcd_flush_if_changed();
 
 		k_msleep(TICK_MS);
 	}

@@ -18,8 +18,9 @@
 	};
 
 	/* LEDs are active low (anode to 3V3) */
-	leds {
-		compatible = "gpio-leds";
+	/* dimmable LEDs: software PWM driver (src/led_swpwm.c), Zephyr LED API */
+	leds: leds {
+		compatible = "voltcraft,swpwm-leds";
 		led_power: led_power {	/* LD1, green */
 			gpios = <&gpiob 15 GPIO_ACTIVE_LOW>;
 		};
@@ -32,6 +33,12 @@
 		led_green: led_green {	/* LD4 */
 			gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
 		};
+	};
+
+	/* active buzzer: Zephyr buzzer API */
+	buzzer: buzzer {
+		compatible = "gpio-buzzer";
+		gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
 	};
 
 	zephyr,user {

@@ -39,6 +39,15 @@ Menu items: 1 ALARM (UP/DOWN on/off), 2 PLANT (preset 0..9), 3 LOG (UP/DOWN sele
 4 CALI, 5 degC/degF, 6 ADV (low/high CO2 threshold of preset 0 and 1, steps of 10 ppm).
 The first key on a dark screen only wakes the backlight. 60 s without a key leaves the menu.
 
+## Hardware abstraction
+* LEDs: Zephyr LED API (`led_set_brightness`), driver `src/led_swpwm.c` (software PWM, binding in
+  `dts/bindings/`, node `leds` in the board dts). Dark mode = 12 % brightness (`DARK_PCT` in `src/leds.c`).
+* Buzzer: Zephyr buzzer API with the `gpio-buzzer` node `buzzer` (active buzzer on PC1).
+* LCD: `lcd_flush_if_changed()` sends the frame buffer only when it changed (plus a refresh every 10 s).
+* `prj.conf` needs `CONFIG_LED=y` and `CONFIG_BUZZER=y`.
+* `dts/bindings/vendor-prefixes.txt` registers the vendor prefix `voltcraft` (silences the devicetree warning).
+* The CMake warning "No SOURCES given to Zephyr library: drivers__led" is harmless: the LED driver is in the application, not in Zephyr's drivers/led.
+
 ## Storage
 Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with NVS in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
 Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
