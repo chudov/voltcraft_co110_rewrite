@@ -78,3 +78,17 @@ Nothing is damaged; the original firmware is in `co110_flash_full.bin`.
 2. Tie the BOOT0 pin (pin 60) to 3V3, power-cycle, then
    `STM32_Programmer_CLI -c port=SWD freq=480 -e all`, remove the wire, power-cycle and flash again.
 3. If NRST were ever wired to the ST-Link (pin 7): `STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst freq=480 -e all`.
+
+## Watchdog
+Zephyr task watchdog (`src/watchdog.c`) on the IWDG (`&iwdg` enabled in the board dts, `CONFIG_WATCHDOG`,
+`CONFIG_TASK_WDT`, `CONFIG_TASK_WDT_HW_FALLBACK`). The UI thread (3 s), the SHT30 thread (15 s) and the
+CM1106S thread (20 s) each feed their own channel once per loop; a stuck thread or a hung system resets the device.
+
+## Unit tests (`tests/logic`)
+Alarm zones, the UI state machine and the start-up sequence run without hardware (the display, settings,
+history and LED modules are replaced by stubs). native_sim needs Linux, so use WSL:
+
+    west build -b native_sim tests/logic -p auto -t run
+
+or run them on the nucleo board: `west build -b nucleo_h723zg tests/logic -p auto` and `west flash`
+(the results are printed on its serial console).

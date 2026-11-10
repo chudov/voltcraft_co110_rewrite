@@ -8,6 +8,7 @@
 #include <zephyr/drivers/gpio.h>
 #include "app.h"
 #include "sensors.h"
+#include "watchdog.h"
 
 #define SHT_PERIOD_MS 4000
 #define CO2_PERIOD_MS 5000
@@ -29,8 +30,10 @@ static void sht_thread(void *a, void *b, void *c)
 
 	int64_t next = k_uptime_get() + 500;
 	int fails = 0;
+	int wdt = wdt_channel(15000);
 
 	while (1) {
+		wdt_feed(wdt);
 		k_sleep(K_TIMEOUT_ABS_MS(next));
 		next += SHT_PERIOD_MS;
 
@@ -57,8 +60,10 @@ static void co2_thread(void *a, void *b, void *c)
 
 	int64_t next = k_uptime_get() + 2000; /* give the sensor time to start */
 	int fails = 0;
+	int wdt = wdt_channel(20000);
 
 	while (1) {
+		wdt_feed(wdt);
 		/* wake up for the next poll or earlier for a calibration request */
 		if (k_sem_take(&cali_sem, K_TIMEOUT_ABS_MS(next)) == 0) {
 			(void)cm1106_calibrate(400);

@@ -14,11 +14,9 @@
 #define CALI_SECONDS 250
 #define ITEM_COUNT 6
 
-enum ui_state { UI_MAIN, UI_MENU, UI_ALARM, UI_PLANT, UI_LOG, UI_CALI, UI_UNIT, UI_ADV, UI_OFFSET };
-
 struct ui_data ud;
 
-static enum ui_state st = UI_MAIN;
+static enum ui_screen st = UI_MAIN;
 static int item = 1;
 static int edit_val;
 static int edit_phase;
@@ -455,6 +453,11 @@ static void feed(enum ui_event ev, int64_t now)
 	uo.now = now;
 	uo.acted = false;
 	(void)smf_run_state(SMF_CTX(&uo));
+}
+
+enum ui_screen ui_current_screen(void)
+{
+	return st;
 }
 
 void ui_init(void)

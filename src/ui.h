@@ -9,6 +9,8 @@
 enum ui_event { EV_UP, EV_DOWN, EV_MENU, EV_ENTER, EV_MENU_LONG, EV_ENTER_LONG, EV_TIMEOUT, EV_CALI_END };
 
 /* measured values; the history holds offset corrected degC tenths, RH %, CO2 ppm */
+enum ui_screen { UI_MAIN, UI_MENU, UI_ALARM, UI_PLANT, UI_LOG, UI_CALI, UI_UNIT, UI_ADV, UI_OFFSET };
+
 struct ui_data {
 	int co2;
 	bool co2_valid;
@@ -23,6 +25,7 @@ struct ui_data {
 extern struct ui_data ud;
 
 void ui_init(void);
+enum ui_screen ui_current_screen(void);
 
 /* true if the event did something (key click) */
 bool ui_event(enum ui_event ev, int64_t now);

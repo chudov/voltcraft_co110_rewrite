@@ -30,6 +30,7 @@
 #include "ui.h"
 #include "startup.h"
 #include "app.h"
+#include "watchdog.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
@@ -160,8 +161,10 @@ int main(void)
 	startup_init(t0);
 
 	bool alarm_timer_on = false;
+	int wdt = wdt_channel(3000);
 
 	while (1) {
+		wdt_feed(wdt);
 		struct msg m;
 		int rc = k_msgq_get(&app_q, &m, K_MSEC(UI_TICK_MS));
 		int64_t now = k_uptime_get();
