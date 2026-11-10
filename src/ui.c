@@ -3,6 +3,7 @@
  * main screen, menu (ALARM, PLANT, LOG, CALI, unit, ADV), offset calibration (MENU long).
  */
 #include <zephyr/kernel.h>
+#include <zephyr/smf.h>
 #include "ui.h"
 #include "settings.h"
 #include "alarm.h"
@@ -47,260 +48,433 @@ bool ui_calibration_due(void)
 	return d;
 }
 
-static bool open_item(void)
+/* ---------------------------------------------------------------------------------------
+ * State machine (Zephyr SMF, hierarchical). S_SCREEN is the parent of all screens except the
+ * main screen: it handles what they share (MENU leaves, time-out returns to the main screen).
+ * Events that a screen does not handle are propagated to the parent.
+ * The variables above hold the data of the screens; "acted" tells the application that the
+ * event did something (key click).
+ * ------------------------------------------------------------------------------------- */
+
+struct ui_obj {
+	struct smf_ctx ctx;   /* must be first */
+	enum ui_event ev;
+	int64_t now;
+	bool acted;
+};
+
+static struct ui_obj uo;
+
+enum {
+	S_MAIN, S_SCREEN, S_MENU, S_ALARM, S_PLANT, S_LOG, S_CALI, S_UNIT,
+	S_ADV_LOW, S_ADV_HIGH, S_OFFSET_TEMP, S_OFFSET_RH,
+};
+
+static const struct smf_state states[];
+
+static enum smf_state_result acted(struct ui_obj *o)
 {
-	switch (item) {
-	case 1:
-		st = UI_ALARM;
-		return true;
-	case 2:
-		st = UI_PLANT;
-		edit_val = g_set.preset;
-		return true;
-	case 3:
-		st = UI_LOG;
-		sel = 0;
-		return true;
-	case 4:
-		st = UI_CALI;
-		cali_running = false;
-		return true;
-	case 5:
-		st = UI_UNIT;
-		edit_val = g_set.unit_f;
-		return true;
-	case 6:
-		if (g_set.preset < 2) { /* only the two user presets are editable */
-			st = UI_ADV;
-			edit_phase = 0;
-			edit_val = g_set.low[g_set.preset];
-			return true;
+	o->acted = true;
+	return SMF_EVENT_HANDLED;
+}
+
+static enum smf_state_result go(struct ui_obj *o, int state)
+{
+	smf_set_state(SMF_CTX(o), &states[state]);
+	return acted(o);
+}
+
+/* --- main screen --- */
+static void main_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_MAIN;
+}
+
+static enum smf_state_result main_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	switch (o->ev) {
+	case EV_DOWN:
+		quantity = (quantity + 1) % 3;
+		return acted(o);
+	case EV_UP:
+		zoom = (zoom + 1) % 4;
+		return acted(o);
+	case EV_MENU:
+		return go(o, S_MENU);
+	case EV_MENU_LONG:
+		if (ud.th_valid) {
+			return go(o, S_OFFSET_TEMP);
 		}
-		return false;
+		break;
+	case EV_ENTER_LONG:
+		settings_factory_reset();
+		history_clear();
+		return acted(o);
 	default:
-		return false;
+		break;
 	}
+	return SMF_EVENT_HANDLED;
+}
+
+/* --- parent of all other screens --- */
+static enum smf_state_result screen_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_MENU) {         /* leave / cancel */
+		return go(o, S_MAIN);
+	}
+	if (o->ev == EV_TIMEOUT) {      /* no key for 60 s */
+		smf_set_state(SMF_CTX(o), &states[S_MAIN]);
+	}
+	return SMF_EVENT_HANDLED;       /* other events are ignored */
+}
+
+/* --- menu --- */
+static void menu_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_MENU;
+	item = 1;
+}
+
+static enum smf_state_result menu_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	switch (o->ev) {
+	case EV_UP:
+		item = item == 1 ? ITEM_COUNT : item - 1;
+		return acted(o);
+	case EV_DOWN:
+		item = item == ITEM_COUNT ? 1 : item + 1;
+		return acted(o);
+	case EV_MENU:
+		if (item == ITEM_COUNT) {
+			return go(o, S_MAIN);
+		}
+		item++;
+		return acted(o);
+	case EV_ENTER:
+		switch (item) {
+		case 1: return go(o, S_ALARM);
+		case 2: return go(o, S_PLANT);
+		case 3: return go(o, S_LOG);
+		case 4: return go(o, S_CALI);
+		case 5: return go(o, S_UNIT);
+		default:
+			if (g_set.preset < 2) { /* only the two user presets are editable */
+				return go(o, S_ADV_LOW);
+			}
+			return SMF_EVENT_HANDLED;
+		}
+	default:
+		return SMF_EVENT_PROPAGATE;
+	}
+}
+
+/* --- ALARM: on / off, saved immediately --- */
+static void alarm_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_ALARM;
+}
+
+static enum smf_state_result alarm_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_UP || o->ev == EV_DOWN) {
+		g_set.alarm_on = !g_set.alarm_on;
+		settings_save();
+		return acted(o);
+	}
+	if (o->ev == EV_ENTER) {
+		return go(o, S_MAIN);
+	}
+	return SMF_EVENT_PROPAGATE;
+}
+
+/* --- PLANT: preset 0..9 --- */
+static void plant_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_PLANT;
+	edit_val = g_set.preset;
+}
+
+static enum smf_state_result plant_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	switch (o->ev) {
+	case EV_UP:
+		edit_val = (edit_val + 1) % PRESET_COUNT;
+		return acted(o);
+	case EV_DOWN:
+		edit_val = (edit_val + PRESET_COUNT - 1) % PRESET_COUNT;
+		return acted(o);
+	case EV_ENTER:
+		g_set.preset = edit_val;
+		settings_save();
+		return go(o, S_MAIN);
+	default:
+		return SMF_EVENT_PROPAGATE;
+	}
+}
+
+/* --- LOG: browse the chart samples --- */
+static void log_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_LOG;
+	sel = 0;
+}
+
+static enum smf_state_result log_run(void *x)
+{
+	struct ui_obj *o = x;
+	int n = ud.hist_count[zoom] > 0 ? ud.hist_count[zoom] : 1;
+
+	switch (o->ev) {
+	case EV_UP:      /* towards older samples (left) */
+		sel = (sel + 1) % n;
+		return acted(o);
+	case EV_DOWN:    /* towards newer samples (right) */
+		sel = (sel + n - 1) % n;
+		return acted(o);
+	case EV_ENTER:   /* next quantity */
+		quantity = (quantity + 1) % 3;
+		return acted(o);
+	default:
+		return SMF_EVENT_PROPAGATE;
+	}
+}
+
+/* --- CALI: 250 s countdown, then the application sends the 400 ppm calibration --- */
+static void cali_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_CALI;
+	cali_running = false;
+}
+
+static void cali_exit(void *x)
+{
+	ARG_UNUSED(x);
+	cali_running = false; /* leaving the screen aborts a running countdown */
+}
+
+static enum smf_state_result cali_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	switch (o->ev) {
+	case EV_ENTER_LONG:
+		if (!cali_running) {
+			cali_running = true;
+			cali_end = o->now + CALI_SECONDS * 1000LL;
+			return acted(o);
+		}
+		return SMF_EVENT_HANDLED;
+	case EV_ENTER:
+		return go(o, S_MAIN);
+	case EV_CALI_END:
+		cali_due = true;
+		smf_set_state(SMF_CTX(o), &states[S_MAIN]);
+		return SMF_EVENT_HANDLED;
+	case EV_TIMEOUT:
+		if (cali_running) {
+			return SMF_EVENT_HANDLED; /* the countdown keeps the screen */
+		}
+		return SMF_EVENT_PROPAGATE;
+	default:
+		return SMF_EVENT_PROPAGATE;
+	}
+}
+
+/* --- unit: degC / degF --- */
+static void unit_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_UNIT;
+	edit_val = g_set.unit_f;
+}
+
+static enum smf_state_result unit_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_UP || o->ev == EV_DOWN) {
+		edit_val ^= 1;
+		return acted(o);
+	}
+	if (o->ev == EV_ENTER) {
+		g_set.unit_f = edit_val;
+		settings_save();
+		return go(o, S_MAIN);
+	}
+	return SMF_EVENT_PROPAGATE;
+}
+
+/* --- ADV: low, then high CO2 threshold of the editable presets --- */
+static enum smf_state_result adv_step(struct ui_obj *o)
+{
+	if (o->ev == EV_UP) {
+		edit_val = edit_val >= 5000 ? 0 : edit_val + 10;
+		return acted(o);
+	}
+	if (o->ev == EV_DOWN) {
+		edit_val = edit_val <= 0 ? 5000 : edit_val - 10;
+		return acted(o);
+	}
+	return SMF_EVENT_PROPAGATE;
+}
+
+static void adv_low_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_ADV;
+	edit_phase = 0;
+	edit_val = g_set.low[g_set.preset];
+}
+
+static enum smf_state_result adv_low_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_ENTER) {
+		adv_low = edit_val;
+		return go(o, S_ADV_HIGH);
+	}
+	return adv_step(o);
+}
+
+static void adv_high_entry(void *x)
+{
+	ARG_UNUSED(x);
+	edit_phase = 1;
+	edit_val = g_set.high[g_set.preset];
+}
+
+static enum smf_state_result adv_high_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_ENTER) {
+		int p = g_set.preset;
+
+		if (edit_val <= adv_low) { /* high must stay above low */
+			return SMF_EVENT_HANDLED;
+		}
+		g_set.low[p] = adv_low;
+		g_set.high[p] = edit_val;
+		settings_save();
+		alarm_set_user_thresholds(p, adv_low, edit_val);
+		return go(o, S_MAIN);
+	}
+	return adv_step(o);
+}
+
+/* --- offsets: temperature, then humidity --- */
+static void offset_temp_entry(void *x)
+{
+	ARG_UNUSED(x);
+	st = UI_OFFSET;
+	edit_phase = 0;
+	edit_val = g_set.unit_f ? c_to_f(t_corrected()) : t_corrected();
+}
+
+static enum smf_state_result offset_temp_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_UP || o->ev == EV_DOWN) {
+		int base = g_set.unit_f ? c_to_f(ud.t_raw) : ud.t_raw;
+
+		edit_val = clamp(edit_val + (o->ev == EV_UP ? 1 : -1), base - 100, base + 100);
+		return acted(o);
+	}
+	if (o->ev == EV_ENTER) {
+		int c = g_set.unit_f ? f_to_c(edit_val) : edit_val;
+
+		g_set.temp_offset = c - ud.t_raw;
+		return go(o, S_OFFSET_RH);
+	}
+	return SMF_EVENT_PROPAGATE;
+}
+
+static void offset_rh_entry(void *x)
+{
+	ARG_UNUSED(x);
+	edit_phase = 1;
+	edit_val = rh_corrected();
+}
+
+static enum smf_state_result offset_rh_run(void *x)
+{
+	struct ui_obj *o = x;
+
+	if (o->ev == EV_UP || o->ev == EV_DOWN) {
+		edit_val = clamp(edit_val + (o->ev == EV_UP ? 1 : -1),
+				 clamp(ud.rh_raw - 20, 0, 99), clamp(ud.rh_raw + 20, 0, 99));
+		return acted(o);
+	}
+	if (o->ev == EV_ENTER) {
+		g_set.rh_offset = edit_val - ud.rh_raw;
+		settings_save();
+		return go(o, S_MAIN);
+	}
+	return SMF_EVENT_PROPAGATE;
+}
+
+/* --- state table --- */
+static const struct smf_state states[] = {
+	[S_MAIN] = SMF_CREATE_STATE(main_entry, main_run, NULL, NULL, NULL),
+	[S_SCREEN] = SMF_CREATE_STATE(NULL, screen_run, NULL, NULL, NULL),
+	[S_MENU] = SMF_CREATE_STATE(menu_entry, menu_run, NULL, &states[S_SCREEN], NULL),
+	[S_ALARM] = SMF_CREATE_STATE(alarm_entry, alarm_run, NULL, &states[S_SCREEN], NULL),
+	[S_PLANT] = SMF_CREATE_STATE(plant_entry, plant_run, NULL, &states[S_SCREEN], NULL),
+	[S_LOG] = SMF_CREATE_STATE(log_entry, log_run, NULL, &states[S_SCREEN], NULL),
+	[S_CALI] = SMF_CREATE_STATE(cali_entry, cali_run, cali_exit, &states[S_SCREEN], NULL),
+	[S_UNIT] = SMF_CREATE_STATE(unit_entry, unit_run, NULL, &states[S_SCREEN], NULL),
+	[S_ADV_LOW] = SMF_CREATE_STATE(adv_low_entry, adv_low_run, NULL, &states[S_SCREEN], NULL),
+	[S_ADV_HIGH] = SMF_CREATE_STATE(adv_high_entry, adv_high_run, NULL, &states[S_SCREEN], NULL),
+	[S_OFFSET_TEMP] = SMF_CREATE_STATE(offset_temp_entry, offset_temp_run, NULL,
+					   &states[S_SCREEN], NULL),
+	[S_OFFSET_RH] = SMF_CREATE_STATE(offset_rh_entry, offset_rh_run, NULL,
+					 &states[S_SCREEN], NULL),
+};
+
+static void feed(enum ui_event ev, int64_t now)
+{
+	uo.ev = ev;
+	uo.now = now;
+	uo.acted = false;
+	(void)smf_run_state(SMF_CTX(&uo));
+}
+
+void ui_init(void)
+{
+	smf_set_initial(SMF_CTX(&uo), &states[S_MAIN]);
 }
 
 bool ui_event(enum ui_event ev, int64_t now)
 {
 	last_input = now;
-
-	switch (st) {
-	case UI_MAIN:
-		if (ev == EV_DOWN) {
-			quantity = (quantity + 1) % 3;
-			return true;
-		}
-		if (ev == EV_MENU) {
-			st = UI_MENU;
-			item = 1;
-			return true;
-		}
-		if (ev == EV_MENU_LONG && ud.th_valid) {
-			st = UI_OFFSET;
-			edit_phase = 0;
-			edit_val = g_set.unit_f ? c_to_f(t_corrected()) : t_corrected();
-			return true;
-		}
-		if (ev == EV_ENTER_LONG) {
-			settings_factory_reset();
-			history_clear();
-			return true;
-		}
-		if (ev == EV_UP) {
-			zoom = (zoom + 1) % 4;
-			return true;
-		}
-		return false;
-
-	case UI_MENU:
-		if (ev == EV_UP) {
-			item = item == 1 ? ITEM_COUNT : item - 1;
-			return true;
-		}
-		if (ev == EV_DOWN) {
-			item = item == ITEM_COUNT ? 1 : item + 1;
-			return true;
-		}
-		if (ev == EV_MENU) {
-			if (item == ITEM_COUNT) {
-				st = UI_MAIN;
-			} else {
-				item++;
-			}
-			return true;
-		}
-		if (ev == EV_ENTER) {
-			return open_item();
-		}
-		return false;
-
-	case UI_ALARM:
-		if (ev == EV_UP || ev == EV_DOWN) {
-			g_set.alarm_on = !g_set.alarm_on;
-			settings_save();
-			return true;
-		}
-		if (ev == EV_MENU || ev == EV_ENTER) {
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-
-	case UI_PLANT:
-		if (ev == EV_UP) {
-			edit_val = (edit_val + 1) % PRESET_COUNT;
-			return true;
-		}
-		if (ev == EV_DOWN) {
-			edit_val = (edit_val + PRESET_COUNT - 1) % PRESET_COUNT;
-			return true;
-		}
-		if (ev == EV_ENTER) {
-			g_set.preset = edit_val;
-			settings_save();
-			st = UI_MAIN;
-			return true;
-		}
-		if (ev == EV_MENU) {
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-
-	case UI_LOG: {
-		int n = ud.hist_count[zoom] > 0 ? ud.hist_count[zoom] : 1;
-
-		if (ev == EV_UP) {          /* towards older samples (left) */
-			sel = (sel + 1) % n;
-			return true;
-		}
-		if (ev == EV_DOWN) {        /* towards newer samples (right) */
-			sel = (sel + n - 1) % n;
-			return true;
-		}
-		if (ev == EV_ENTER) {       /* next quantity */
-			quantity = (quantity + 1) % 3;
-			return true;
-		}
-		if (ev == EV_MENU) {
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-	}
-
-	case UI_UNIT:
-		if (ev == EV_UP || ev == EV_DOWN) {
-			edit_val ^= 1;
-			return true;
-		}
-		if (ev == EV_ENTER) {
-			g_set.unit_f = edit_val;
-			settings_save();
-			st = UI_MAIN;
-			return true;
-		}
-		if (ev == EV_MENU) {
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-
-	case UI_ADV:
-		if (ev == EV_UP) {
-			edit_val = edit_val >= 5000 ? 0 : edit_val + 10;
-			return true;
-		}
-		if (ev == EV_DOWN) {
-			edit_val = edit_val <= 0 ? 5000 : edit_val - 10;
-			return true;
-		}
-		if (ev == EV_ENTER) {
-			int p = g_set.preset;
-
-			if (edit_phase == 0) {
-				adv_low = edit_val;
-				edit_phase = 1;
-				edit_val = g_set.high[p];
-				return true;
-			}
-			if (edit_val <= adv_low) { /* high must stay above low */
-				return false;
-			}
-			g_set.low[p] = adv_low;
-			g_set.high[p] = edit_val;
-			settings_save();
-			alarm_set_user_thresholds(p, adv_low, edit_val);
-			st = UI_MAIN;
-			return true;
-		}
-		if (ev == EV_MENU) {
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-
-	case UI_CALI:
-		if (ev == EV_ENTER_LONG && !cali_running) {
-			cali_running = true;
-			cali_end = now + CALI_SECONDS * 1000LL;
-			return true;
-		}
-		if (ev == EV_ENTER || ev == EV_MENU) {
-			cali_running = false;
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-
-	case UI_OFFSET:
-		if (ev == EV_UP || ev == EV_DOWN) {
-			int d = ev == EV_UP ? 1 : -1;
-
-			if (edit_phase == 0) {
-				int base = g_set.unit_f ? c_to_f(ud.t_raw) : ud.t_raw;
-
-				edit_val = clamp(edit_val + d, base - 100, base + 100);
-			} else {
-				edit_val = clamp(edit_val + d, clamp(ud.rh_raw - 20, 0, 99),
-						 clamp(ud.rh_raw + 20, 0, 99));
-			}
-			return true;
-		}
-		if (ev == EV_ENTER) {
-			if (edit_phase == 0) {
-				int c = g_set.unit_f ? f_to_c(edit_val) : edit_val;
-
-				g_set.temp_offset = c - ud.t_raw;
-				edit_phase = 1;
-				edit_val = rh_corrected();
-			} else {
-				g_set.rh_offset = edit_val - ud.rh_raw;
-				settings_save();
-				st = UI_MAIN;
-			}
-			return true;
-		}
-		if (ev == EV_MENU) {
-			st = UI_MAIN;
-			return true;
-		}
-		return false;
-	}
-	return false;
+	feed(ev, now);
+	return uo.acted;
 }
 
 void ui_tick(int64_t now)
 {
 	if (cali_running && now >= cali_end) {
-		cali_running = false;
-		cali_due = true;
-		st = UI_MAIN;
-	}
-	if (st != UI_MAIN && !cali_running && now - last_input > MENU_TIMEOUT_MS) {
-		st = UI_MAIN;
+		feed(EV_CALI_END, now);
+	} else if (st != UI_MAIN && now - last_input > MENU_TIMEOUT_MS) {
+		feed(EV_TIMEOUT, now);
 	}
 }
 

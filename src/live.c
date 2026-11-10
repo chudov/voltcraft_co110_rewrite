@@ -28,6 +28,7 @@
 #include "settings.h"
 #include "history.h"
 #include "ui.h"
+#include "startup.h"
 #include "app.h"
 
 #define U DT_PATH(zephyr_user)
@@ -39,7 +40,6 @@ static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
 static const struct device *const buzzer = DEVICE_DT_GET(DT_NODELABEL(buzzer));
 
 #define UI_TICK_MS 100
-#define STARTUP_MS 37000
 #define BACKLIGHT_MS 63000
 #define CLICK_MS 50
 #define CLICK_LOCK_MS 200
@@ -114,7 +114,7 @@ static void handle(const struct msg *m, int64_t now)
 		alarm_evaluate(m->a, g_set.preset, &req);
 		alarm_req = req;
 		/* the chart only collects samples after the start-up sequence */
-		if (now - t0 >= STARTUP_MS && ud.th_valid) {
+		if (!startup_active() && ud.th_valid) {
 			history_push(m->a, clamp_rh(ud.rh_raw + g_set.rh_offset),
 				     ud.t_raw + g_set.temp_offset);
 		}
@@ -139,40 +139,6 @@ static void handle(const struct msg *m, int64_t now)
 	}
 }
 
-/* start-up screen, returns true while the start-up sequence is running */
-static bool startup_screen(int64_t elapsed_ms, int preset)
-{
-	int th_low, th_high;
-
-	alarm_thresholds(preset, &th_low, &th_high);
-	disp_clear();
-
-	if (elapsed_ms < 2000) {
-		lcd_fill(0xFF);
-		leds_set(LED_ALL);
-	} else if (elapsed_ms < 3000) {
-		leds_set(LED_LD1);
-	} else if (elapsed_ms < 7000) {
-		bool low = elapsed_ms < 5000;
-
-		leds_set(elapsed_ms < 4000 ? LED_LD2 : (elapsed_ms < 5000 ? LED_LD3 :
-			 (elapsed_ms < 6000 ? LED_LD4 : LED_ALL)));
-		disp_co2(low ? th_low : th_high, DISP_CO2_VALUE);
-		if (low) {
-			disp_rh_text('L', '0');
-		} else {
-			disp_rh_text('H', 'I');
-		}
-	} else if (elapsed_ms < STARTUP_MS) {
-		leds_set(0);
-		disp_co2_countdown(30 - (int)((elapsed_ms - 7000) / 1000));
-	} else {
-		return false;
-	}
-	lcd_flush_if_changed();
-	return true;
-}
-
 int main(void)
 {
 	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
@@ -186,10 +152,12 @@ int main(void)
 	settings_init();
 	history_load();
 	input_init();
+	ui_init();
 
 	t0 = k_uptime_get();
 	buzzer_beep(buzzer, 200); /* start-up beep */
 	wake_backlight();
+	startup_init(t0);
 
 	bool alarm_timer_on = false;
 
@@ -233,7 +201,10 @@ int main(void)
 		}
 
 		/* display and zone LEDs */
-		if (startup_screen(now - t0, g_set.preset)) {
+		startup_tick(now);
+		if (startup_active()) {
+			startup_render(g_set.preset);
+			lcd_flush_if_changed();
 			continue;
 		}
 

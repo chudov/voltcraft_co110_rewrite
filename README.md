@@ -27,6 +27,8 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 ## Architecture (live)
 * UI thread = main (`src/live.c`, `src/ui.c`): waits for messages (`k_msgq`, `src/app.h`) with a 100 ms time-out;
   owns the display, the UI state, the settings and the history; redraws the LCD only on change.
+* State machines (Zephyr SMF): `src/ui.c` (hierarchical: all screens have the parent `S_SCREEN` that handles
+  MENU = leave and the 60 s time-out) and `src/startup.c` (the 37 s start-up sequence, one state per step).
 * Sensor threads (`src/sensor_tasks.c`): SHT30 every 4 s, CM1106S every 5 s (power cycle after 40 failed polls,
   400 ppm calibration on request of the UI).
 * Keys (`src/input.c`): GPIO edge interrupts start a work item that scans the keys while one is down.

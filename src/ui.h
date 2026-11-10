@@ -5,7 +5,8 @@
 #include <stdint.h>
 #include "display.h"
 
-enum ui_event { EV_UP, EV_DOWN, EV_MENU, EV_ENTER, EV_MENU_LONG, EV_ENTER_LONG };
+/* EV_TIMEOUT and EV_CALI_END are generated inside ui_tick() */
+enum ui_event { EV_UP, EV_DOWN, EV_MENU, EV_ENTER, EV_MENU_LONG, EV_ENTER_LONG, EV_TIMEOUT, EV_CALI_END };
 
 /* measured values; the history holds offset corrected degC tenths, RH %, CO2 ppm */
 struct ui_data {
@@ -20,6 +21,8 @@ struct ui_data {
 };
 
 extern struct ui_data ud;
+
+void ui_init(void);
 
 /* true if the event did something (key click) */
 bool ui_event(enum ui_event ev, int64_t now);
