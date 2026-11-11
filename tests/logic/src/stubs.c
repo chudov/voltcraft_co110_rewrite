@@ -17,7 +17,6 @@ int stub_menu_line;
 void stub_defaults(void)
 {
 	memset(&g_set, 0, sizeof(g_set));
-	g_set.magic = SETTINGS_MAGIC;
 	g_set.alarm_on = 1;
 	g_set.low[0] = 800;
 	g_set.high[0] = 1200;
@@ -25,7 +24,7 @@ void stub_defaults(void)
 	g_set.high[1] = 900;
 }
 
-void settings_save(void)
+void co110_settings_save(void)
 {
 	stub_save_count++;
 }

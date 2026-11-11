@@ -187,7 +187,7 @@ static enum smf_state_result alarm_run(void *x)
 
 	if (o->ev == EV_UP || o->ev == EV_DOWN) {
 		g_set.alarm_on = !g_set.alarm_on;
-		settings_save();
+		co110_settings_save();
 		return acted(o);
 	}
 	if (o->ev == EV_ENTER) {
@@ -217,7 +217,7 @@ static enum smf_state_result plant_run(void *x)
 		return acted(o);
 	case EV_ENTER:
 		g_set.preset = edit_val;
-		settings_save();
+		co110_settings_save();
 		return go(o, S_MAIN);
 	default:
 		return SMF_EVENT_PROPAGATE;
@@ -312,7 +312,7 @@ static enum smf_state_result unit_run(void *x)
 	}
 	if (o->ev == EV_ENTER) {
 		g_set.unit_f = edit_val;
-		settings_save();
+		co110_settings_save();
 		return go(o, S_MAIN);
 	}
 	return SMF_EVENT_PROPAGATE;
@@ -370,7 +370,7 @@ static enum smf_state_result adv_high_run(void *x)
 		}
 		g_set.low[p] = adv_low;
 		g_set.high[p] = edit_val;
-		settings_save();
+		co110_settings_save();
 		alarm_set_user_thresholds(p, adv_low, edit_val);
 		return go(o, S_MAIN);
 	}
@@ -423,7 +423,7 @@ static enum smf_state_result offset_rh_run(void *x)
 	}
 	if (o->ev == EV_ENTER) {
 		g_set.rh_offset = edit_val - ud.rh_raw;
-		settings_save();
+		co110_settings_save();
 		return go(o, S_MAIN);
 	}
 	return SMF_EVENT_PROPAGATE;

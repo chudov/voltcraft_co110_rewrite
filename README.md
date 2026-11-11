@@ -59,8 +59,8 @@ The first key on a dark screen only wakes the backlight. 60 s without a key leav
 * The CMake warning "No SOURCES given to Zephyr library: drivers__led" is harmless: the LED driver is in the application, not in Zephyr's drivers/led.
 
 ## Storage
-Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with NVS in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
-Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
+Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with the Zephyr settings subsystem (NVS backend, one key per item under `co110/`) in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
+Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_SETTINGS`, `CONFIG_SETTINGS_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
 
 ## Project rule: debug in sleep
 Every firmware on this board must allow debugging in sleep, because NRST is not reachable and

@@ -99,7 +99,7 @@ static void handle(const struct msg *m, int64_t now)
 
 	case MSG_COMBO:
 		g_set.dark_mode = !g_set.dark_mode; /* stored, survives a power cycle */
-		settings_save();
+		co110_settings_save();
 		wake_backlight();
 		break;
 
@@ -153,7 +153,7 @@ int main(void)
 		leds_set(LED_ALL);
 		return 0;
 	}
-	settings_init();
+	co110_settings_init();
 	history_load();
 	leds_set_dark(g_set.dark_mode);
 	input_init();
@@ -189,7 +189,7 @@ int main(void)
 		co2_suspended = ui_calibrating();
 
 		/* periodic alarm beep while the alarm is active */
-		bool alarm_active = alarm_req && g_set.alarm_on;
+		bool alarm_active = alarm_req && g_set.alarm_on && !startup_active();
 
 		if (alarm_active && !alarm_timer_on) {
 			alarm_timer_on = true;
