@@ -12,7 +12,7 @@ struct settings {
 	uint8_t alarm_on;       /* 1 = alarm beeper enabled */
 	uint8_t unit_f;         /* 0 = degC, 1 = degF */
 	uint8_t preset;         /* 0 = human, 1 = custom plant, 2..9 = plant presets */
-	uint8_t reserved;
+	uint8_t dark_mode;      /* 1 = dark mode: LEDs dimmed, no key click / start-up beep */
 	int16_t temp_offset;    /* 0.1 degC added to the measured temperature */
 	int16_t rh_offset;      /* % added to the measured humidity */
 	uint16_t low[2];        /* user thresholds of preset 0 and 1 (ppm) */

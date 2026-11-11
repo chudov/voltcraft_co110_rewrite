@@ -15,7 +15,7 @@
  *   5-7 s    LD4 / all LEDs, "Hi" and the high CO2 threshold
  *   7-37 s   LEDs off, 30 s countdown in the CO2 digits (sensors already run)
  * Keys: see ui.c; UP + DOWN held for 1 s toggles dark mode.
- * Every accepted key gives a 50 ms click and silences the alarm until the next CO2 reading;
+ * Every accepted key gives a 50 ms click (not in dark mode) and silences the alarm until the next CO2 reading;
  * the backlight stays on 63 s after a key (the first key on a dark screen only wakes it).
  */
 #include <zephyr/kernel.h>
@@ -89,14 +89,17 @@ static void handle(const struct msg *m, int64_t now)
 			break; /* the first key on a dark screen only wakes it */
 		}
 		if (ui_event((enum ui_event)m->a, now)) {
-			buzzer_beep(buzzer, CLICK_MS);
-			lock_end = now + CLICK_LOCK_MS;
+			if (!g_set.dark_mode) { /* dark mode: no key click */
+				buzzer_beep(buzzer, CLICK_MS);
+				lock_end = now + CLICK_LOCK_MS;
+			}
 			alarm_req = false; /* silence until the next reading */
 		}
 		break;
 
 	case MSG_COMBO:
-		leds_set_dark(!leds_is_dark());
+		g_set.dark_mode = !g_set.dark_mode; /* stored, survives a power cycle */
+		settings_save();
 		wake_backlight();
 		break;
 
@@ -152,11 +155,14 @@ int main(void)
 	}
 	settings_init();
 	history_load();
+	leds_set_dark(g_set.dark_mode);
 	input_init();
 	ui_init();
 
 	t0 = k_uptime_get();
-	buzzer_beep(buzzer, 200); /* start-up beep */
+	if (!g_set.dark_mode) { /* dark mode: no start-up beep */
+		buzzer_beep(buzzer, 200);
+	}
 	wake_backlight();
 	startup_init(t0);
 
@@ -175,6 +181,7 @@ int main(void)
 		}
 		now = k_uptime_get();
 
+		leds_set_dark(g_set.dark_mode); /* also follows a factory reset */
 		ui_tick(now);
 		if (ui_calibration_due()) {
 			k_sem_give(&cali_sem); /* the CM1106S thread sends the 400 ppm calibration */

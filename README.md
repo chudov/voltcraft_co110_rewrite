@@ -43,7 +43,7 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 | MENU long (6 s) | calibrate temperature and humidity offsets | - |
 | ENTER | - | open item / store the edited value |
 | ENTER long (6 s) | factory reset (defaults) | in CALI: start the 250 s CO2 calibration countdown |
-| UP + DOWN, 1 s | toggle dark mode (LEDs dimmed by software PWM, duty in `src/leds.c`) | |
+| UP + DOWN, 1 s | toggle dark mode (LEDs dimmed, key click and start-up beep off, the alarm beep stays; software PWM, duty in `src/leds.c`; the setting is stored in flash) | |
 
 Menu items: 1 ALARM (UP/DOWN on/off), 2 PLANT (preset 0..9), 3 LOG (UP/DOWN select a sample, blinking in the chart, ENTER next quantity),
 4 CALI, 5 degC/degF, 6 ADV (low/high CO2 threshold of preset 0 and 1, steps of 10 ppm).
