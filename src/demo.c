@@ -17,7 +17,6 @@
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
 
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
-static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
 
 enum { KB_UP, KB_DOWN, KB_MENU, KB_ENTER, KB_COUNT };
 static const struct gpio_dt_spec keys[KB_COUNT] = {
@@ -30,7 +29,6 @@ static const struct gpio_dt_spec keys[KB_COUNT] = {
 int main(void)
 {
 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_INACTIVE);
 	backlight_set(true);
 	for (int i = 0; i < KB_COUNT; i++) {
 		gpio_pin_configure_dt(&keys[i], GPIO_INPUT);

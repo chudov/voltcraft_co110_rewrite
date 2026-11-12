@@ -25,7 +25,6 @@
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
 
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
-static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
 
 /* index 0..3 = LD4 (green), LD3 (yellow), LD2 (red), LD1 (power) */
 static const struct gpio_dt_spec leds[4] = {
@@ -76,7 +75,6 @@ int main(void)
 {
 	/* board state like the original firmware after MX_GPIO_Init */
 	out_init(&buzzer, 0);
-	out_init(&sensor_power, 0);   /* sensor not needed for this test */
 	backlight_set(true);
 	for (int i = 0; i < 4; i++) {
 		out_init(&leds[i], 0);

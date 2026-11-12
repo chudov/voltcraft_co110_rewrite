@@ -5,7 +5,8 @@
  *           the sensor is power cycled; zero point calibration on request of the UI.
  */
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/regulator.h>
 #include "app.h"
 #include "sensors.h"
 #include "watchdog.h"
@@ -16,8 +17,7 @@
 #define CO2_MAX_FAILS 40
 #define POWER_OFF_MS 500
 
-#define U DT_PATH(zephyr_user)
-static const struct gpio_dt_spec sensor_power = GPIO_DT_SPEC_GET(U, sensor_power_gpios);
+static const struct device *const sensor_supply = DEVICE_DT_GET(DT_NODELABEL(sensor_supply));
 
 K_SEM_DEFINE(cali_sem, 0, 1);
 volatile bool co2_suspended;
@@ -55,7 +55,7 @@ static void co2_thread(void *a, void *b, void *c)
 	ARG_UNUSED(b);
 	ARG_UNUSED(c);
 
-	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_ACTIVE);
+	(void)regulator_enable(sensor_supply);
 	cm1106_init();
 
 	int64_t next = k_uptime_get() + 2000; /* give the sensor time to start */
@@ -87,9 +87,9 @@ static void co2_thread(void *a, void *b, void *c)
 		} else if (++fails >= CO2_MAX_FAILS) {
 			fails = 0;
 			post(MSG_CO2_LOST, 0, 0);
-			gpio_pin_set_dt(&sensor_power, 0); /* power cycle the sensor */
+			(void)regulator_disable(sensor_supply); /* power cycle the sensor */
 			k_msleep(POWER_OFF_MS);
-			gpio_pin_set_dt(&sensor_power, 1);
+			(void)regulator_enable(sensor_supply);
 			next = k_uptime_get() + 2000;
 		} else {
 			next = start + CO2_PERIOD_MS;

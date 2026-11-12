@@ -49,6 +49,13 @@
 		};
 	};
 
+	/* CM1106S supply: Zephyr regulator API (off at boot, the sensor thread switches it on) */
+	sensor_supply: sensor-supply {
+		compatible = "regulator-fixed";
+		regulator-name = "cm1106s-supply";
+		enable-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
+	};
+
 	zephyr,user {
 		/* HT1625-style LCD controller, bit-banged */
 		lcd-cs-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;	/* active low on the wire, driven raw */
@@ -57,7 +64,6 @@
 		lcd-rd-gpios = <&gpioc 9 GPIO_ACTIVE_HIGH>;
 
 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
-		sensor-power-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;	/* CM1106S supply */
 
 		/* touch controller outputs, active low */
 		up-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;

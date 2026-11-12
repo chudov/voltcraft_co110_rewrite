@@ -62,6 +62,8 @@ The first key on a dark screen only wakes the backlight. 60 s without a key leav
 Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with the Zephyr settings subsystem (NVS backend, one key per item under `co110/`) in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
 Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_SETTINGS`, `CONFIG_SETTINGS_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
 
+Board peripherals as standard Zephyr devices: LEDs (LED API, `led_swpwm.c`), buzzer (buzzer API), LCD backlight (`gpio-leds` node, `backlight.h`), CM1106S supply (`regulator-fixed`, regulator API, needs `CONFIG_REGULATOR`), PC13 and PA2 (`gpio-hog` nodes in the board dts, purpose unknown). The LCD bit-bang pins and the touch keys are still plain GPIOs in the `zephyr,user` node.
+
 ## Project rule: debug in sleep
 Every firmware on this board must allow debugging in sleep, because NRST is not reachable and
 a locked-out chip can only be recovered via BOOT0. Verified on the device: `CONFIG_DEBUG=y` and
