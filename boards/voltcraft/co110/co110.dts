@@ -41,6 +41,14 @@
 		gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
 	};
 
+	/* LCD backlight: Zephyr LED API (on/off), see src/backlight.h */
+	backlight_leds: backlight {
+		compatible = "gpio-leds";
+		led_backlight: led_backlight {
+			gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
 	zephyr,user {
 		/* HT1625-style LCD controller, bit-banged */
 		lcd-cs-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;	/* active low on the wire, driven raw */
@@ -48,7 +56,6 @@
 		lcd-data-gpios = <&gpioc 7 GPIO_ACTIVE_HIGH>;
 		lcd-rd-gpios = <&gpioc 9 GPIO_ACTIVE_HIGH>;
 
-		backlight-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
 		sensor-power-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;	/* CM1106S supply */
 		aux-pc13-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;	/* set high by the original firmware, purpose unknown */

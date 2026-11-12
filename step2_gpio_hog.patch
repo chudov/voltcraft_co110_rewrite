@@ -1,0 +1,118 @@
+diff -ruN a/boards/voltcraft/co110/co110.dts b/boards/voltcraft/co110/co110.dts
+--- a/boards/voltcraft/co110/co110.dts	2026-11-12 17:29:23.809950067 +0000
++++ b/boards/voltcraft/co110/co110.dts	2026-11-12 17:29:23.813656367 +0000
+@@ -58,8 +58,6 @@
+ 
+ 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
+ 		sensor-power-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;	/* CM1106S supply */
+-		aux-pc13-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;	/* set high by the original firmware, purpose unknown */
+-		aux-pa2-gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>;	/* driven low after boot, purpose unknown */
+ 
+ 		/* touch controller outputs, active low */
+ 		up-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
+@@ -105,9 +103,29 @@
+ 	apb2-prescaler = <1>;
+ };
+ 
+-&gpioa { status = "okay"; };
++&gpioa {
++	status = "okay";
++
++	/* PA2: driven low by the original firmware, purpose unknown */
++	aux_pa2_hog: aux-pa2-hog {
++		gpio-hog;
++		gpios = <2 GPIO_ACTIVE_HIGH>;
++		output-low;
++	};
++};
++
+ &gpiob { status = "okay"; };
+-&gpioc { status = "okay"; };
++
++&gpioc {
++	status = "okay";
++
++	/* PC13: set high by the original firmware, purpose unknown */
++	aux_pc13_hog: aux-pc13-hog {
++		gpio-hog;
++		gpios = <13 GPIO_ACTIVE_HIGH>;
++		output-high;
++	};
++};
+ 
+ /* CM1106S CO2 sensor, 9600 8N1 */
+ &usart1 {
+diff -ruN a/src/bitmap_test.c b/src/bitmap_test.c
+--- a/src/bitmap_test.c	2026-11-12 17:29:23.811323199 +0000
++++ b/src/bitmap_test.c	2026-11-12 17:29:23.814862822 +0000
+@@ -26,8 +26,6 @@
+ 
+ static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
+ static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
+-static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
+-static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
+ 
+ /* index 0..3 = LD4 (green), LD3 (yellow), LD2 (red), LD1 (power) */
+ static const struct gpio_dt_spec leds[4] = {
+@@ -80,8 +78,6 @@
+ 	out_init(&buzzer, 0);
+ 	out_init(&sensor_power, 0);   /* sensor not needed for this test */
+ 	backlight_set(true);
+-	out_init(&aux_pc13, 1);
+-	out_init(&aux_pa2, 0);
+ 	for (int i = 0; i < 4; i++) {
+ 		out_init(&leds[i], 0);
+ 	}
+diff -ruN a/src/demo.c b/src/demo.c
+--- a/src/demo.c	2026-11-12 17:29:23.810866545 +0000
++++ b/src/demo.c	2026-11-12 17:29:23.814508816 +0000
+@@ -16,8 +16,6 @@
+ #define U DT_PATH(zephyr_user)
+ #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
+ 
+-static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
+-static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
+ static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
+ static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
+ 
+@@ -34,8 +32,6 @@
+ 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
+ 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_INACTIVE);
+ 	backlight_set(true);
+-	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
+-	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
+ 	for (int i = 0; i < KB_COUNT; i++) {
+ 		gpio_pin_configure_dt(&keys[i], GPIO_INPUT);
+ 	}
+diff -ruN a/src/live.c b/src/live.c
+--- a/src/live.c	2026-11-12 17:29:23.810548093 +0000
++++ b/src/live.c	2026-11-12 17:29:23.814140094 +0000
+@@ -19,7 +19,6 @@
+  * the backlight stays on 63 s after a key (the first key on a dark screen only wakes it).
+  */
+ #include <zephyr/kernel.h>
+-#include <zephyr/drivers/gpio.h>
+ #include <zephyr/drivers/buzzer.h>
+ #include "lcd.h"
+ #include "backlight.h"
+@@ -33,11 +32,6 @@
+ #include "app.h"
+ #include "watchdog.h"
+ 
+-#define U DT_PATH(zephyr_user)
+-#define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
+-
+-static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
+-static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
+ static const struct device *const buzzer = DEVICE_DT_GET(DT_NODELABEL(buzzer));
+ 
+ #define UI_TICK_MS 100
+@@ -146,8 +140,6 @@
+ int main(void)
+ {
+ 	backlight_set(true);
+-	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
+-	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
+ 	leds_init();
+ 	if (lcd_init() != 0) {
+ 		leds_set(LED_ALL);

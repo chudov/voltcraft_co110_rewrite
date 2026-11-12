@@ -19,11 +19,11 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include "lcd.h"
+#include "backlight.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
 
-static const struct gpio_dt_spec backlight = GPIO_OUT(backlight_gpios);
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
 static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
 static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
@@ -79,7 +79,7 @@ int main(void)
 	/* board state like the original firmware after MX_GPIO_Init */
 	out_init(&buzzer, 0);
 	out_init(&sensor_power, 0);   /* sensor not needed for this test */
-	out_init(&backlight, 1);
+	backlight_set(true);
 	out_init(&aux_pc13, 1);
 	out_init(&aux_pa2, 0);
 	for (int i = 0; i < 4; i++) {
@@ -137,7 +137,7 @@ int main(void)
 						dirty = true;
 					} else {
 						bl = !bl;
-						gpio_pin_set_dt(&backlight, bl);
+						backlight_set(bl);
 					}
 				}
 			} else {

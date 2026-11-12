@@ -1,0 +1,148 @@
+diff -ruN a/boards/voltcraft/co110/co110.dts b/boards/voltcraft/co110/co110.dts
+--- a/boards/voltcraft/co110/co110.dts	2026-11-12 17:29:02.649223254 +0000
++++ b/boards/voltcraft/co110/co110.dts	2026-11-12 17:29:23.809950067 +0000
+@@ -41,6 +41,14 @@
+ 		gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
+ 	};
+ 
++	/* LCD backlight: Zephyr LED API (on/off), see src/backlight.h */
++	backlight_leds: backlight {
++		compatible = "gpio-leds";
++		led_backlight: led_backlight {
++			gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
++		};
++	};
++
+ 	zephyr,user {
+ 		/* HT1625-style LCD controller, bit-banged */
+ 		lcd-cs-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;	/* active low on the wire, driven raw */
+@@ -48,7 +56,6 @@
+ 		lcd-data-gpios = <&gpioc 7 GPIO_ACTIVE_HIGH>;
+ 		lcd-rd-gpios = <&gpioc 9 GPIO_ACTIVE_HIGH>;
+ 
+-		backlight-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+ 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
+ 		sensor-power-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;	/* CM1106S supply */
+ 		aux-pc13-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;	/* set high by the original firmware, purpose unknown */
+diff -ruN a/src/backlight.h b/src/backlight.h
+--- a/src/backlight.h	1970-01-01 00:00:00.000000000 +0000
++++ b/src/backlight.h	2026-11-12 17:29:23.809353030 +0000
+@@ -0,0 +1,21 @@
++#ifndef BACKLIGHT_H_
++#define BACKLIGHT_H_
++
++/* LCD backlight through the standard Zephyr LED API (gpio-leds node "backlight_leds" in the board dts) */
++#include <stdbool.h>
++#include <zephyr/device.h>
++#include <zephyr/drivers/led.h>
++
++#define BL_DEV DEVICE_DT_GET(DT_NODELABEL(backlight_leds))
++#define BL_IDX DT_NODE_CHILD_IDX(DT_NODELABEL(led_backlight))
++
++static inline void backlight_set(bool on)
++{
++	if (on) {
++		(void)led_on(BL_DEV, BL_IDX);
++	} else {
++		(void)led_off(BL_DEV, BL_IDX);
++	}
++}
++
++#endif
+diff -ruN a/src/bitmap_test.c b/src/bitmap_test.c
+--- a/src/bitmap_test.c	2026-11-12 17:29:02.649568152 +0000
++++ b/src/bitmap_test.c	2026-11-12 17:29:23.811323199 +0000
+@@ -19,11 +19,11 @@
+ #include <zephyr/kernel.h>
+ #include <zephyr/drivers/gpio.h>
+ #include "lcd.h"
++#include "backlight.h"
+ 
+ #define U DT_PATH(zephyr_user)
+ #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
+ 
+-static const struct gpio_dt_spec backlight = GPIO_OUT(backlight_gpios);
+ static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
+ static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
+ static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
+@@ -79,7 +79,7 @@
+ 	/* board state like the original firmware after MX_GPIO_Init */
+ 	out_init(&buzzer, 0);
+ 	out_init(&sensor_power, 0);   /* sensor not needed for this test */
+-	out_init(&backlight, 1);
++	backlight_set(true);
+ 	out_init(&aux_pc13, 1);
+ 	out_init(&aux_pa2, 0);
+ 	for (int i = 0; i < 4; i++) {
+@@ -137,7 +137,7 @@
+ 						dirty = true;
+ 					} else {
+ 						bl = !bl;
+-						gpio_pin_set_dt(&backlight, bl);
++						backlight_set(bl);
+ 					}
+ 				}
+ 			} else {
+diff -ruN a/src/demo.c b/src/demo.c
+--- a/src/demo.c	2026-11-12 17:29:02.649589375 +0000
++++ b/src/demo.c	2026-11-12 17:29:23.810866545 +0000
+@@ -10,12 +10,12 @@
+ #include <zephyr/kernel.h>
+ #include <zephyr/drivers/gpio.h>
+ #include "lcd.h"
++#include "backlight.h"
+ #include "display.h"
+ 
+ #define U DT_PATH(zephyr_user)
+ #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
+ 
+-static const struct gpio_dt_spec backlight = GPIO_OUT(backlight_gpios);
+ static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
+ static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
+ static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
+@@ -33,7 +33,7 @@
+ {
+ 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
+ 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_INACTIVE);
+-	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
++	backlight_set(true);
+ 	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
+ 	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
+ 	for (int i = 0; i < KB_COUNT; i++) {
+diff -ruN a/src/live.c b/src/live.c
+--- a/src/live.c	2026-11-12 17:29:02.857046070 +0000
++++ b/src/live.c	2026-11-12 17:29:23.810548093 +0000
+@@ -22,6 +22,7 @@
+ #include <zephyr/drivers/gpio.h>
+ #include <zephyr/drivers/buzzer.h>
+ #include "lcd.h"
++#include "backlight.h"
+ #include "display.h"
+ #include "leds.h"
+ #include "alarm.h"
+@@ -35,7 +36,6 @@
+ #define U DT_PATH(zephyr_user)
+ #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
+ 
+-static const struct gpio_dt_spec backlight = GPIO_OUT(backlight_gpios);
+ static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
+ static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
+ static const struct device *const buzzer = DEVICE_DT_GET(DT_NODELABEL(buzzer));
+@@ -145,7 +145,7 @@
+ 
+ int main(void)
+ {
+-	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
++	backlight_set(true);
+ 	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
+ 	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
+ 	leds_init();
+@@ -206,7 +206,7 @@
+ 		bool want_bl = bl_timed || alarm_active;
+ 
+ 		if (want_bl != bl_on) {
+-			gpio_pin_set_dt(&backlight, want_bl);
++			backlight_set(want_bl);
+ 			bl_on = want_bl;
+ 		}
+ 

@@ -10,12 +10,12 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include "lcd.h"
+#include "backlight.h"
 #include "display.h"
 
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
 
-static const struct gpio_dt_spec backlight = GPIO_OUT(backlight_gpios);
 static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
 static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
@@ -33,7 +33,7 @@ int main(void)
 {
 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&backlight, GPIO_OUTPUT_ACTIVE);
+	backlight_set(true);
 	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
 	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
 	for (int i = 0; i < KB_COUNT; i++) {
