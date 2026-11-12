@@ -16,8 +16,6 @@
 #define U DT_PATH(zephyr_user)
 #define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
 
-static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
-static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
 static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
 
@@ -34,8 +32,6 @@ int main(void)
 	gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_INACTIVE);
 	gpio_pin_configure_dt(&sensor_power, GPIO_OUTPUT_INACTIVE);
 	backlight_set(true);
-	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
-	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
 	for (int i = 0; i < KB_COUNT; i++) {
 		gpio_pin_configure_dt(&keys[i], GPIO_INPUT);
 	}

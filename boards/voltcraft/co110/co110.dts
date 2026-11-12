@@ -58,8 +58,6 @@
 
 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
 		sensor-power-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;	/* CM1106S supply */
-		aux-pc13-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;	/* set high by the original firmware, purpose unknown */
-		aux-pa2-gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>;	/* driven low after boot, purpose unknown */
 
 		/* touch controller outputs, active low */
 		up-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
@@ -105,9 +103,29 @@
 	apb2-prescaler = <1>;
 };
 
-&gpioa { status = "okay"; };
+&gpioa {
+	status = "okay";
+
+	/* PA2: driven low by the original firmware, purpose unknown */
+	aux_pa2_hog: aux-pa2-hog {
+		gpio-hog;
+		gpios = <2 GPIO_ACTIVE_HIGH>;
+		output-low;
+	};
+};
+
 &gpiob { status = "okay"; };
-&gpioc { status = "okay"; };
+
+&gpioc {
+	status = "okay";
+
+	/* PC13: set high by the original firmware, purpose unknown */
+	aux_pc13_hog: aux-pc13-hog {
+		gpio-hog;
+		gpios = <13 GPIO_ACTIVE_HIGH>;
+		output-high;
+	};
+};
 
 /* CM1106S CO2 sensor, 9600 8N1 */
 &usart1 {

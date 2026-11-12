@@ -26,8 +26,6 @@
 
 static const struct gpio_dt_spec buzzer = GPIO_OUT(buzzer_gpios);
 static const struct gpio_dt_spec sensor_power = GPIO_OUT(sensor_power_gpios);
-static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
-static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
 
 /* index 0..3 = LD4 (green), LD3 (yellow), LD2 (red), LD1 (power) */
 static const struct gpio_dt_spec leds[4] = {
@@ -80,8 +78,6 @@ int main(void)
 	out_init(&buzzer, 0);
 	out_init(&sensor_power, 0);   /* sensor not needed for this test */
 	backlight_set(true);
-	out_init(&aux_pc13, 1);
-	out_init(&aux_pa2, 0);
 	for (int i = 0; i < 4; i++) {
 		out_init(&leds[i], 0);
 	}

@@ -19,7 +19,6 @@
  * the backlight stays on 63 s after a key (the first key on a dark screen only wakes it).
  */
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/buzzer.h>
 #include "lcd.h"
 #include "backlight.h"
@@ -33,11 +32,6 @@
 #include "app.h"
 #include "watchdog.h"
 
-#define U DT_PATH(zephyr_user)
-#define GPIO_OUT(name) GPIO_DT_SPEC_GET(U, name)
-
-static const struct gpio_dt_spec aux_pc13 = GPIO_OUT(aux_pc13_gpios);
-static const struct gpio_dt_spec aux_pa2 = GPIO_OUT(aux_pa2_gpios);
 static const struct device *const buzzer = DEVICE_DT_GET(DT_NODELABEL(buzzer));
 
 #define UI_TICK_MS 100
@@ -146,8 +140,6 @@ static void handle(const struct msg *m, int64_t now)
 int main(void)
 {
 	backlight_set(true);
-	gpio_pin_configure_dt(&aux_pc13, GPIO_OUTPUT_ACTIVE);
-	gpio_pin_configure_dt(&aux_pa2, GPIO_OUTPUT_INACTIVE);
 	leds_init();
 	if (lcd_init() != 0) {
 		leds_set(LED_ALL);
