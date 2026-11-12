@@ -6,6 +6,10 @@
 .temp/
 .libs/
 
+
+#patch files
+*.patch
+
 # Object files, generates by linker
 *.lo
 *.la
