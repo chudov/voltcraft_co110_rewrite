@@ -2,14 +2,23 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/sys/ring_buffer.h>
 #include "sensors.h"
 
 static const struct device *const uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
+/* received bytes: the ISR is the only producer, the sensor thread the only consumer */
 #define RX_SIZE 64
-static volatile uint8_t rx_buf[RX_SIZE];
-static volatile unsigned int rx_head; /* written by the ISR */
-static unsigned int rx_tail;          /* used by the thread */
+RING_BUF_DECLARE(cm1106_rx_rb, RX_SIZE);
+
+/* drop everything received so far */
+static void rx_flush(void)
+{
+	uint8_t tmp[RX_SIZE];
+
+	while (ring_buf_get(&cm1106_rx_rb, tmp, sizeof(tmp)) > 0) {
+	}
+}
 
 static void uart_isr(const struct device *dev, void *user)
 {
@@ -17,13 +26,13 @@ static void uart_isr(const struct device *dev, void *user)
 
 	uart_irq_update(dev);
 	while (uart_irq_rx_ready(dev)) {
-		uint8_t c;
+		uint8_t c[16];
+		int n = uart_fifo_read(dev, c, sizeof(c));
 
-		if (uart_fifo_read(dev, &c, 1) != 1) {
+		if (n <= 0) {
 			break;
 		}
-		rx_buf[rx_head % RX_SIZE] = c;
-		rx_head++;
+		ring_buf_put(&cm1106_rx_rb, c, n); /* a full buffer drops the new bytes */
 	}
 }
 
@@ -41,7 +50,7 @@ void cm1106_request(void)
 {
 	static const uint8_t req[4] = { 0x11, 0x01, 0x01, 0xED };
 
-	rx_tail = rx_head; /* drop old bytes */
+	rx_flush(); /* drop old bytes */
 	for (int i = 0; i < 4; i++) {
 		uart_poll_out(uart, req[i]);
 	}
@@ -50,12 +59,8 @@ void cm1106_request(void)
 bool cm1106_get_result(int *ppm)
 {
 	uint8_t f[RX_SIZE];
-	int n = 0;
+	int n = ring_buf_get(&cm1106_rx_rb, f, sizeof(f));
 
-	while (rx_tail != rx_head && n < RX_SIZE) {
-		f[n++] = rx_buf[rx_tail % RX_SIZE];
-		rx_tail++;
-	}
 	for (int i = 0; i + 8 <= n; i++) {
 		if (f[i] != 0x16 || f[i + 1] != 0x05 || f[i + 2] != 0x01) {
 			continue;
@@ -84,19 +89,15 @@ bool cm1106_calibrate(int ppm)
 	f[5] = (uint8_t)(0x100 - sum);
 
 	for (int attempt = 0; attempt < 10; attempt++) {
-		rx_tail = rx_head;
+		rx_flush();
 		for (int i = 0; i < 6; i++) {
 			uart_poll_out(uart, f[i]);
 		}
 		k_msleep(50);
 
 		uint8_t r[RX_SIZE];
-		int n = 0;
+		int n = ring_buf_get(&cm1106_rx_rb, r, sizeof(r));
 
-		while (rx_tail != rx_head && n < RX_SIZE) {
-			r[n++] = rx_buf[rx_tail % RX_SIZE];
-			rx_tail++;
-		}
 		for (int i = 0; i + 4 <= n; i++) {
 			if (r[i] == 0x16 && r[i + 1] == 0x01 && r[i + 2] == 0x03 && r[i + 3] == 0xE6) {
 				return true;

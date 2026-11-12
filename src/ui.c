@@ -31,10 +31,9 @@ static int64_t cali_end;
 
 static int c_to_f(int c) { return c * 9 / 5 + 320; }
 static int f_to_c(int f) { return ((f - 320) * 5 + (f >= 320 ? 4 : -4)) / 9; }
-static int clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 static int t_corrected(void) { return ud.t_raw + g_set.temp_offset; }
-static int rh_corrected(void) { return clamp(ud.rh_raw + g_set.rh_offset, 0, 99); }
+static int rh_corrected(void) { return CLAMP(ud.rh_raw + g_set.rh_offset, 0, 99); }
 
 bool ui_calibrating(void) { return cali_running; }
 
@@ -235,7 +234,7 @@ static void log_entry(void *x)
 static enum smf_state_result log_run(void *x)
 {
 	struct ui_obj *o = x;
-	int n = ud.hist_count[zoom] > 0 ? ud.hist_count[zoom] : 1;
+	int n = MAX(ud.hist_count[zoom], 1);
 
 	switch (o->ev) {
 	case EV_UP:      /* towards older samples (left) */
@@ -393,7 +392,7 @@ static enum smf_state_result offset_temp_run(void *x)
 	if (o->ev == EV_UP || o->ev == EV_DOWN) {
 		int base = g_set.unit_f ? c_to_f(ud.t_raw) : ud.t_raw;
 
-		edit_val = clamp(edit_val + (o->ev == EV_UP ? 1 : -1), base - 100, base + 100);
+		edit_val = CLAMP(edit_val + (o->ev == EV_UP ? 1 : -1), base - 100, base + 100);
 		return acted(o);
 	}
 	if (o->ev == EV_ENTER) {
@@ -417,8 +416,8 @@ static enum smf_state_result offset_rh_run(void *x)
 	struct ui_obj *o = x;
 
 	if (o->ev == EV_UP || o->ev == EV_DOWN) {
-		edit_val = clamp(edit_val + (o->ev == EV_UP ? 1 : -1),
-				 clamp(ud.rh_raw - 20, 0, 99), clamp(ud.rh_raw + 20, 0, 99));
+		edit_val = CLAMP(edit_val + (o->ev == EV_UP ? 1 : -1),
+				 CLAMP(ud.rh_raw - 20, 0, 99), CLAMP(ud.rh_raw + 20, 0, 99));
 		return acted(o);
 	}
 	if (o->ev == EV_ENTER) {

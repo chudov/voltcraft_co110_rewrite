@@ -63,11 +63,6 @@ static bool bl_timed;       /* backlight on because of recent activity */
 static bool bl_on = true;   /* backlight pin state */
 static int64_t lock_end;    /* no alarm beep before this time (key click lockout) */
 
-static int clamp_rh(int v)
-{
-	return v < 0 ? 0 : (v > 99 ? 99 : v);
-}
-
 static void wake_backlight(void)
 {
 	bl_timed = true;
@@ -113,7 +108,7 @@ static void handle(const struct msg *m, int64_t now)
 		alarm_req = req;
 		/* the chart only collects samples after the start-up sequence */
 		if (!startup_active() && ud.th_valid) {
-			history_push(m->a, clamp_rh(ud.rh_raw + g_set.rh_offset),
+			history_push(m->a, CLAMP(ud.rh_raw + g_set.rh_offset, 0, 99),
 				     ud.t_raw + g_set.temp_offset);
 		}
 		break;
