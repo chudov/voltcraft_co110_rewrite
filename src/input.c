@@ -46,7 +46,7 @@ static void repeat_fn(struct k_work *work)
 	k_mutex_lock(&in_lock, K_FOREVER);
 	if (pressed[k] && !suppress[k]) {
 		fired[k] = true;
-		post(MSG_KEY, up_down_event(k), 0);
+		co110_post(MSG_KEY, up_down_event(k), 0);
 		k_work_reschedule(dw, K_MSEC(REPEAT_EVERY_MS));
 	}
 	k_mutex_unlock(&in_lock);
@@ -58,7 +58,7 @@ static void combo_fn(struct k_work *work)
 
 	k_mutex_lock(&in_lock, K_FOREVER);
 	if (pressed[KB_UP] && pressed[KB_DOWN]) {
-		post(MSG_COMBO, 0, 0);
+		co110_post(MSG_COMBO, 0, 0);
 	}
 	k_mutex_unlock(&in_lock);
 }
@@ -80,7 +80,7 @@ static void up_down_change(int k, bool down)
 		k_work_cancel_delayable(&repeat_work[k]);
 		k_work_cancel_delayable(&combo_work);
 		if (!fired[k] && !suppress[k]) {
-			post(MSG_KEY, up_down_event(k), 0);
+			co110_post(MSG_KEY, up_down_event(k), 0);
 		}
 		fired[k] = false;
 		suppress[k] = false;
@@ -114,16 +114,16 @@ static void longpress_cb(struct input_event *evt, void *user_data)
 	}
 	switch (evt->code) {
 	case INPUT_KEY_MENU:
-		post(MSG_KEY, EV_MENU, 0);
+		co110_post(MSG_KEY, EV_MENU, 0);
 		break;
 	case INPUT_KEY_ENTER:
-		post(MSG_KEY, EV_ENTER, 0);
+		co110_post(MSG_KEY, EV_ENTER, 0);
 		break;
 	case INPUT_KEY_F1:
-		post(MSG_KEY, EV_MENU_LONG, 0);
+		co110_post(MSG_KEY, EV_MENU_LONG, 0);
 		break;
 	case INPUT_KEY_F2:
-		post(MSG_KEY, EV_ENTER_LONG, 0);
+		co110_post(MSG_KEY, EV_ENTER_LONG, 0);
 		break;
 	default:
 		break;

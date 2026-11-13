@@ -46,14 +46,14 @@ K_MSGQ_DEFINE(app_q, sizeof(struct msg), 16, 4);
 static void bl_timer_fn(struct k_timer *t)
 {
 	ARG_UNUSED(t);
-	post(MSG_BACKLIGHT_OFF, 0, 0);
+	co110_post(MSG_BACKLIGHT_OFF, 0, 0);
 }
 K_TIMER_DEFINE(bl_timer, bl_timer_fn, NULL);
 
 static void alarm_timer_fn(struct k_timer *t)
 {
 	ARG_UNUSED(t);
-	post(MSG_ALARM_BEEP, 0, 0);
+	co110_post(MSG_ALARM_BEEP, 0, 0);
 }
 K_TIMER_DEFINE(alarm_timer, alarm_timer_fn, NULL);
 
@@ -93,30 +93,30 @@ static void handle(const struct msg *m, int64_t now)
 		break;
 
 	case MSG_TH:
-		ud.t_raw = m->a;
-		ud.rh_raw = m->b;
-		ud.th_valid = true;
+		co110_ud.t_raw = m->a;
+		co110_ud.rh_raw = m->b;
+		co110_ud.th_valid = true;
 		break;
 
 	case MSG_CO2: {
 		bool req;
 
-		ud.co2 = m->a;
-		ud.co2_valid = true;
-		ud.co2_error = false;
+		co110_ud.co2 = m->a;
+		co110_ud.co2_valid = true;
+		co110_ud.co2_error = false;
 		alarm_evaluate(m->a, g_set.preset, &req);
 		alarm_req = req;
 		/* the chart only collects samples after the start-up sequence */
-		if (!startup_active() && ud.th_valid) {
-			history_push(m->a, CLAMP(ud.rh_raw + g_set.rh_offset, 0, 99),
-				     ud.t_raw + g_set.temp_offset);
+		if (!startup_active() && co110_ud.th_valid) {
+			history_push(m->a, CLAMP(co110_ud.rh_raw + g_set.rh_offset, 0, 99),
+				     co110_ud.t_raw + g_set.temp_offset);
 		}
 		break;
 	}
 
 	case MSG_CO2_LOST:
-		ud.co2_valid = false;
-		ud.co2_error = true;
+		co110_ud.co2_valid = false;
+		co110_ud.co2_error = true;
 		alarm_req = false;
 		break;
 
@@ -154,10 +154,10 @@ int main(void)
 	startup_init(t0);
 
 	bool alarm_timer_on = false;
-	int wdt = wdt_channel(3000);
+	int wdt = co110_wdt_channel(3000);
 
 	while (1) {
-		wdt_feed(wdt);
+		co110_wdt_feed(wdt);
 		struct msg m;
 		int rc = k_msgq_get(&app_q, &m, K_MSEC(UI_TICK_MS));
 		int64_t now = k_uptime_get();
@@ -207,10 +207,10 @@ int main(void)
 
 		enum zone zone = ZONE_NONE;
 
-		if (ud.co2_valid) {
+		if (co110_ud.co2_valid) {
 			bool dummy;
 
-			zone = alarm_evaluate(ud.co2, g_set.preset, &dummy);
+			zone = alarm_evaluate(co110_ud.co2, g_set.preset, &dummy);
 		}
 		leds_set((zone == ZONE_OK ? LED_LD4 : 0) | (zone == ZONE_WARN ? LED_LD3 : 0) |
 			 (zone == ZONE_ALERT ? LED_LD2 : 0) | LED_LD1);

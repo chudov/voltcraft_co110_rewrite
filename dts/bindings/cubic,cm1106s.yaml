@@ -5,6 +5,11 @@ description: |
   resumed and off when it is suspended (PM_DEVICE_ACTION_SUSPEND), so the
   application can power cycle the sensor with pm_device_action_run().
 
+  The sensor starts with auto calibration (ABC) on, cycle 7 days, base 400 ppm.
+  If one of the abc-* properties below is given, the driver sends the complete ABC
+  setting (missing values: the defaults above) after every power up, as soon as the
+  sensor answers. Without any of them the sensor is left in its default state.
+
 compatible: "cubic,cm1106s"
 
 include: [sensor-device.yaml, uart-device.yaml]
@@ -13,3 +18,16 @@ properties:
   vin-supply:
     type: phandle
     description: Regulator that powers the sensor (optional)
+
+  abc-enable:
+    type: int
+    enum: [0, 1]
+    description: 1 = auto calibration on, 0 = off
+
+  abc-cycle-days:
+    type: int
+    description: Auto calibration cycle in days (1 to 30)
+
+  abc-base-ppm:
+    type: int
+    description: Auto calibration base value in ppm

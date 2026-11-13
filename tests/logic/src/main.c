@@ -95,7 +95,7 @@ static void ui_before(void *f)
 	stub_hist_clear_count = 0;
 	alarm_set_user_thresholds(0, 800, 1200);
 	alarm_set_user_thresholds(1, 600, 900);
-	ud.th_valid = false;
+	co110_ud.th_valid = false;
 	T = 1000;
 	ui_init();
 }
@@ -265,9 +265,9 @@ ZTEST(ui, test_offsets_need_a_measurement)
 	zassert_false(ev(EV_MENU_LONG));
 	zassert_equal(ui_current_screen(), UI_MAIN);
 
-	ud.th_valid = true;
-	ud.t_raw = 200;
-	ud.rh_raw = 40;
+	co110_ud.th_valid = true;
+	co110_ud.t_raw = 200;
+	co110_ud.rh_raw = 40;
 	zassert_true(ev(EV_MENU_LONG));
 	zassert_equal(ui_current_screen(), UI_OFFSET);
 	zassert_true(ev(EV_UP));              /* 20.1 degC */

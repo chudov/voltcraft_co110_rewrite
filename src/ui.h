@@ -22,7 +22,7 @@ struct ui_data {
 	int hist_count[4];
 };
 
-extern struct ui_data ud;
+extern struct ui_data co110_ud;
 
 void ui_init(void);
 enum ui_screen ui_current_screen(void);

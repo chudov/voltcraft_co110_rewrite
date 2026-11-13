@@ -23,7 +23,7 @@ struct msg {
 
 extern struct k_msgq app_q;
 
-static inline void post(enum msg_type type, int a, int b)
+static inline void co110_post(enum msg_type type, int a, int b)
 {
 	struct msg m = { type, a, b };
 

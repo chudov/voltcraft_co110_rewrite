@@ -134,7 +134,7 @@ void co110_settings_save(void)
 	}
 }
 
-void settings_factory_reset(void)
+void co110_settings_factory_reset(void)
 {
 	defaults();
 	apply();
@@ -190,7 +190,7 @@ static int get_cb(const char *key, size_t len, settings_read_cb read_cb, void *c
 	return 0;
 }
 
-bool storage_get(const char *key, void *buf, size_t len)
+bool co110_storage_get(const char *key, void *buf, size_t len)
 {
 	struct get_ctx c = { .buf = buf, .len = len, .ok = false };
 
@@ -201,14 +201,14 @@ bool storage_get(const char *key, void *buf, size_t len)
 	return c.ok;
 }
 
-void storage_put(const char *key, const void *buf, size_t len)
+void co110_storage_put(const char *key, const void *buf, size_t len)
 {
 	if (ready) {
 		(void)settings_save_one(key, buf, len);
 	}
 }
 
-void storage_delete(const char *key)
+void co110_storage_delete(const char *key)
 {
 	if (ready) {
 		(void)settings_delete(key);

@@ -18,27 +18,27 @@ static void shift_in(int level, int co2, int rh, int t)
 {
 	for (int q = 0; q < 3; q++) {
 		for (int c = DISP_CHART_COLS - 1; c > 0; c--) {
-			ud.hist[level][q][c] = ud.hist[level][q][c - 1];
+			co110_ud.hist[level][q][c] = co110_ud.hist[level][q][c - 1];
 		}
 	}
-	ud.hist[level][DISP_Q_CO2][0] = co2;
-	ud.hist[level][DISP_Q_RH][0] = rh;
-	ud.hist[level][DISP_Q_TEMP][0] = t;
-	if (ud.hist_count[level] < DISP_CHART_COLS) {
-		ud.hist_count[level]++;
+	co110_ud.hist[level][DISP_Q_CO2][0] = co2;
+	co110_ud.hist[level][DISP_Q_RH][0] = rh;
+	co110_ud.hist[level][DISP_Q_TEMP][0] = t;
+	if (co110_ud.hist_count[level] < DISP_CHART_COLS) {
+		co110_ud.hist_count[level]++;
 	}
 }
 
 static void save_level(int level)
 {
-	struct blob b = { .magic = MAGIC, .count = ud.hist_count[level] };
+	struct blob b = { .magic = MAGIC, .count = co110_ud.hist_count[level] };
 
 	for (int q = 0; q < 3; q++) {
 		for (int c = 0; c < DISP_CHART_COLS; c++) {
-			b.v[q][c] = (int16_t)ud.hist[level][q][c];
+			b.v[q][c] = (int16_t)co110_ud.hist[level][q][c];
 		}
 	}
-	storage_put(hist_key[level], &b, sizeof(b));
+	co110_storage_put(hist_key[level], &b, sizeof(b));
 }
 
 void history_load(void)
@@ -46,12 +46,12 @@ void history_load(void)
 	for (int level = 1; level < 4; level++) {
 		struct blob b;
 
-		if (storage_get(hist_key[level], &b, sizeof(b)) && b.magic == MAGIC &&
+		if (co110_storage_get(hist_key[level], &b, sizeof(b)) && b.magic == MAGIC &&
 		    b.count <= DISP_CHART_COLS) {
-			ud.hist_count[level] = b.count;
+			co110_ud.hist_count[level] = b.count;
 			for (int q = 0; q < 3; q++) {
 				for (int c = 0; c < DISP_CHART_COLS; c++) {
-					ud.hist[level][q][c] = b.v[q][c];
+					co110_ud.hist[level][q][c] = b.v[q][c];
 				}
 			}
 		}
@@ -78,10 +78,10 @@ void history_push(int co2, int rh, int tenths)
 
 void history_clear(void)
 {
-	memset(ud.hist, 0, sizeof(ud.hist));
-	memset(ud.hist_count, 0, sizeof(ud.hist_count));
+	memset(co110_ud.hist, 0, sizeof(co110_ud.hist));
+	memset(co110_ud.hist_count, 0, sizeof(co110_ud.hist_count));
 	pushes = 0;
 	for (int level = 1; level < 4; level++) {
-		storage_delete(hist_key[level]);
+		co110_storage_delete(hist_key[level]);
 	}
 }

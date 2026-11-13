@@ -32,10 +32,10 @@ static void sht_thread(void *a, void *b, void *c)
 
 	int64_t next = k_uptime_get() + 500;
 	int fails = 0;
-	int wdt = wdt_channel(15000);
+	int wdt = co110_wdt_channel(15000);
 
 	while (1) {
-		wdt_feed(wdt);
+		co110_wdt_feed(wdt);
 		k_sleep(K_TIMEOUT_ABS_MS(next));
 		next += SHT_PERIOD_MS;
 
@@ -43,7 +43,7 @@ static void sht_thread(void *a, void *b, void *c)
 
 		if (sht30_measure(&t, &h) == 0) {
 			fails = 0;
-			post(MSG_TH, t, h);
+			co110_post(MSG_TH, t, h);
 		} else if (++fails >= 5) {
 			sht30_recover_bus();
 			fails = 0;
@@ -69,12 +69,12 @@ static void co2_thread(void *a, void *b, void *c)
 	ARG_UNUSED(b);
 	ARG_UNUSED(c);
 
-	int wdt = wdt_channel(20000);
+	int wdt = co110_wdt_channel(20000);
 
 	if (!device_is_ready(co2_dev)) {
-		post(MSG_CO2_LOST, 0, 0);
+		co110_post(MSG_CO2_LOST, 0, 0);
 		while (1) { /* driver init failed (UART or supply not ready): nothing to poll */
-			wdt_feed(wdt);
+			co110_wdt_feed(wdt);
 			k_msleep(1000);
 		}
 	}
@@ -83,7 +83,7 @@ static void co2_thread(void *a, void *b, void *c)
 	int fails = 0;
 
 	while (1) {
-		wdt_feed(wdt);
+		co110_wdt_feed(wdt);
 		/* wake up for the next poll or earlier for a calibration request */
 		if (k_sem_take(&cali_sem, K_TIMEOUT_ABS_MS(next)) == 0) {
 			(void)co2_calibrate(400);
@@ -101,11 +101,11 @@ static void co2_thread(void *a, void *b, void *c)
 		if (sensor_sample_fetch_chan(co2_dev, SENSOR_CHAN_CO2) == 0 &&
 		    sensor_channel_get(co2_dev, SENSOR_CHAN_CO2, &v) == 0) {
 			fails = 0;
-			post(MSG_CO2, v.val1, 0);
+			co110_post(MSG_CO2, v.val1, 0);
 			next = start + CO2_PERIOD_MS;
 		} else if (++fails >= CO2_MAX_FAILS) {
 			fails = 0;
-			post(MSG_CO2_LOST, 0, 0);
+			co110_post(MSG_CO2_LOST, 0, 0);
 			/* power cycle the sensor: the driver switches its supply regulator */
 			(void)pm_device_action_run(co2_dev, PM_DEVICE_ACTION_SUSPEND);
 			k_msleep(POWER_OFF_MS);

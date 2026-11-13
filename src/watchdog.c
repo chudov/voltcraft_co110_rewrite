@@ -18,7 +18,7 @@ static int wdt_sysinit(void)
 }
 SYS_INIT(wdt_sysinit, APPLICATION, 0);
 
-int wdt_channel(int period_ms)
+int co110_wdt_channel(int period_ms)
 {
 	if (!ready) {
 		return -ENODEV;
@@ -26,7 +26,7 @@ int wdt_channel(int period_ms)
 	return task_wdt_add(period_ms, NULL, NULL); /* NULL: no callback, reset on expiry */
 }
 
-void wdt_feed(int channel)
+void co110_wdt_feed(int channel)
 {
 	if (channel >= 0) {
 		(void)task_wdt_feed(channel);

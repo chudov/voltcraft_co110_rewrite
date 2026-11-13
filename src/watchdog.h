@@ -7,8 +7,8 @@
  * system hangs, the device resets. The IWDG is paused while a debugger halts the core.
  */
 
-/* returns a channel id (>= 0) or a negative errno; wdt_feed() ignores negative ids */
-int wdt_channel(int period_ms);
-void wdt_feed(int channel);
+/* returns a channel id (>= 0) or a negative errno; co110_wdt_feed() ignores negative ids */
+int co110_wdt_channel(int period_ms);
+void co110_wdt_feed(int channel);
 
 #endif

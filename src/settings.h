@@ -23,11 +23,11 @@ extern struct settings g_set;
 int co110_settings_init(void);
 /* store all items that changed (the settings subsystem skips unchanged values) */
 void co110_settings_save(void);
-void settings_factory_reset(void);
+void co110_settings_factory_reset(void);
 
 /* raw items for other modules (history), keys like "co110/hist1" */
-bool storage_get(const char *key, void *buf, size_t len);
-void storage_put(const char *key, const void *buf, size_t len);
-void storage_delete(const char *key);
+bool co110_storage_get(const char *key, void *buf, size_t len);
+void co110_storage_put(const char *key, const void *buf, size_t len);
+void co110_storage_delete(const char *key);
 
 #endif

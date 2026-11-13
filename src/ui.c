@@ -14,7 +14,7 @@
 #define CALI_SECONDS 250
 #define ITEM_COUNT 6
 
-struct ui_data ud;
+struct ui_data co110_ud;
 
 static enum ui_screen st = UI_MAIN;
 static int item = 1;
@@ -32,8 +32,8 @@ static int64_t cali_end;
 static int c_to_f(int c) { return c * 9 / 5 + 320; }
 static int f_to_c(int f) { return ((f - 320) * 5 + (f >= 320 ? 4 : -4)) / 9; }
 
-static int t_corrected(void) { return ud.t_raw + g_set.temp_offset; }
-static int rh_corrected(void) { return CLAMP(ud.rh_raw + g_set.rh_offset, 0, 99); }
+static int t_corrected(void) { return co110_ud.t_raw + g_set.temp_offset; }
+static int rh_corrected(void) { return CLAMP(co110_ud.rh_raw + g_set.rh_offset, 0, 99); }
 
 bool ui_calibrating(void) { return cali_running; }
 
@@ -102,12 +102,12 @@ static enum smf_state_result main_run(void *x)
 	case EV_MENU:
 		return go(o, S_MENU);
 	case EV_MENU_LONG:
-		if (ud.th_valid) {
+		if (co110_ud.th_valid) {
 			return go(o, S_OFFSET_TEMP);
 		}
 		break;
 	case EV_ENTER_LONG:
-		settings_factory_reset();
+		co110_settings_factory_reset();
 		history_clear();
 		return acted(o);
 	default:
@@ -234,7 +234,7 @@ static void log_entry(void *x)
 static enum smf_state_result log_run(void *x)
 {
 	struct ui_obj *o = x;
-	int n = MAX(ud.hist_count[zoom], 1);
+	int n = MAX(co110_ud.hist_count[zoom], 1);
 
 	switch (o->ev) {
 	case EV_UP:      /* towards older samples (left) */
@@ -390,7 +390,7 @@ static enum smf_state_result offset_temp_run(void *x)
 	struct ui_obj *o = x;
 
 	if (o->ev == EV_UP || o->ev == EV_DOWN) {
-		int base = g_set.unit_f ? c_to_f(ud.t_raw) : ud.t_raw;
+		int base = g_set.unit_f ? c_to_f(co110_ud.t_raw) : co110_ud.t_raw;
 
 		edit_val = CLAMP(edit_val + (o->ev == EV_UP ? 1 : -1), base - 100, base + 100);
 		return acted(o);
@@ -398,7 +398,7 @@ static enum smf_state_result offset_temp_run(void *x)
 	if (o->ev == EV_ENTER) {
 		int c = g_set.unit_f ? f_to_c(edit_val) : edit_val;
 
-		g_set.temp_offset = c - ud.t_raw;
+		g_set.temp_offset = c - co110_ud.t_raw;
 		return go(o, S_OFFSET_RH);
 	}
 	return SMF_EVENT_PROPAGATE;
@@ -417,11 +417,11 @@ static enum smf_state_result offset_rh_run(void *x)
 
 	if (o->ev == EV_UP || o->ev == EV_DOWN) {
 		edit_val = CLAMP(edit_val + (o->ev == EV_UP ? 1 : -1),
-				 CLAMP(ud.rh_raw - 20, 0, 99), CLAMP(ud.rh_raw + 20, 0, 99));
+				 CLAMP(co110_ud.rh_raw - 20, 0, 99), CLAMP(co110_ud.rh_raw + 20, 0, 99));
 		return acted(o);
 	}
 	if (o->ev == EV_ENTER) {
-		g_set.rh_offset = edit_val - ud.rh_raw;
+		g_set.rh_offset = edit_val - co110_ud.rh_raw;
 		co110_settings_save();
 		return go(o, S_MAIN);
 	}
@@ -503,12 +503,12 @@ void ui_render(int64_t now)
 		} else {
 			disp_blank_co2();
 		}
-	} else if (ud.co2_error) {
+	} else if (co110_ud.co2_error) {
 		disp_co2(0, DISP_CO2_ERROR);
-	} else if (!ud.co2_valid) {
+	} else if (!co110_ud.co2_valid) {
 		disp_co2(0, DISP_CO2_DASHES);
 	} else {
-		disp_co2(ud.co2, DISP_CO2_VALUE);
+		disp_co2(co110_ud.co2, DISP_CO2_VALUE);
 	}
 
 	/* temperature */
@@ -516,7 +516,7 @@ void ui_render(int64_t now)
 		if (blink) {
 			disp_temp(edit_val, g_set.unit_f);
 		}
-	} else if (ud.th_valid) {
+	} else if (co110_ud.th_valid) {
 		int t = t_corrected();
 
 		disp_temp(unit ? c_to_f(t) : t, unit);
@@ -533,24 +533,24 @@ void ui_render(int64_t now)
 		if (blink) {
 			disp_rh(edit_val);
 		}
-	} else if (ud.th_valid) {
+	} else if (co110_ud.th_valid) {
 		disp_rh(rh_corrected());
 	}
 
 	/* chart of the selected zoom level */
-	for (int c = 0; c < ud.hist_count[zoom]; c++) {
-		int v = ud.hist[zoom][quantity][c];
+	for (int c = 0; c < co110_ud.hist_count[zoom]; c++) {
+		int v = co110_ud.hist[zoom][quantity][c];
 
 		chart[c] = (quantity == DISP_Q_TEMP && unit) ? c_to_f(v) : v;
 	}
-	disp_chart(chart, ud.hist_count[zoom], quantity, unit, st == UI_LOG ? sel : -1,
+	disp_chart(chart, co110_ud.hist_count[zoom], quantity, unit, st == UI_LOG ? sel : -1,
 		   st == UI_LOG && blink);
 	disp_zoom(zoom);
 
 	/* LOG: show the selected sample in the field of the chosen quantity */
 	if (st == UI_LOG) {
 		disp_log_cursor(true);
-		if (sel < ud.hist_count[zoom]) {
+		if (sel < co110_ud.hist_count[zoom]) {
 			int v = chart[sel];
 
 			if (quantity == DISP_Q_CO2) {

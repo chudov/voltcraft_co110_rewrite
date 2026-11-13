@@ -29,7 +29,7 @@ void co110_settings_save(void)
 	stub_save_count++;
 }
 
-void settings_factory_reset(void)
+void co110_settings_factory_reset(void)
 {
 	stub_reset_count++;
 	stub_defaults();
