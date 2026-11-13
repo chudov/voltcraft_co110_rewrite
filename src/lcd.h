@@ -13,6 +13,8 @@ int lcd_init(void);
 void lcd_command(uint8_t cmd);
 void lcd_write(uint8_t addr, const uint8_t *buf, size_t len);
 void lcd_flush(void);
+/* send the buffer only when it differs from what the display holds (or every 10 s as refresh) */
+void lcd_flush_if_changed(void);
 void lcd_fill(uint8_t value);
 void lcd_set(uint8_t byte, uint8_t bit, bool on);
 

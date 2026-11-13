@@ -6,6 +6,7 @@
  *                  then data bytes, each LSB first
  * Data is latched on the rising edge of WR.
  */
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include "lcd.h"
@@ -117,5 +118,21 @@ void lcd_set(uint8_t byte, uint8_t bit, bool on)
 		lcd_fb[byte] |= BIT(bit);
 	} else {
 		lcd_fb[byte] &= ~BIT(bit);
+	}
+}
+
+#define FORCE_REFRESH_MS 10000
+
+void lcd_flush_if_changed(void)
+{
+	static uint8_t shadow[LCD_FB_SIZE];
+	static int64_t last_sent = -1;
+	int64_t now = k_uptime_get();
+
+	if (last_sent < 0 || now - last_sent >= FORCE_REFRESH_MS ||
+	    memcmp(shadow, lcd_fb, LCD_FB_SIZE) != 0) {
+		lcd_flush();
+		memcpy(shadow, lcd_fb, LCD_FB_SIZE);
+		last_sent = now;
 	}
 }

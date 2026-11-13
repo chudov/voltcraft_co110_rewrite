@@ -1,0 +1,16 @@
+description: |
+  Group of GPIO LEDs that can be dimmed. A software PWM timer (100 us step, 32 steps)
+  runs inside the driver; the standard Zephyr LED API is used to set the brightness.
+  The index of an LED in the LED API is the position of its child node.
+
+compatible: "voltcraft,swpwm-leds"
+
+include: base.yaml
+
+child-binding:
+  description: One LED
+  properties:
+    gpios:
+      type: phandle-array
+      required: true
+      description: GPIO the LED is connected to (use GPIO_ACTIVE_LOW for LEDs to 3V3)

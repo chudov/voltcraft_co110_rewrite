@@ -24,6 +24,16 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 * **bit-map test** (`src/bitmap_test.c`): lights buffer bits one by one: `-- -DCONFIG_APP_BITMAP_TEST=y`
   (use `-p always` when switching the application).
 
+## Architecture (live)
+* UI thread = main (`src/live.c`, `src/ui.c`): waits for messages (`k_msgq`, `src/app.h`) with a 100 ms time-out;
+  owns the display, the UI state, the settings and the history; redraws the LCD only on change.
+* State machines (Zephyr SMF): `src/ui.c` (hierarchical: all screens have the parent `S_SCREEN` that handles
+  MENU = leave and the 60 s time-out) and `src/startup.c` (the 37 s start-up sequence, one state per step).
+* Sensor threads (`src/sensor_tasks.c`): SHT30 every 4 s, CM1106S every 5 s (power cycle after 40 failed polls,
+  400 ppm calibration on request of the UI).
+* Keys (`src/input.c`): GPIO edge interrupts start a work item that scans the keys while one is down.
+* Timers: 63 s backlight, 1.1 s alarm beep period; both post messages to the UI thread.
+
 ## Keys (live)
 | Key | Main screen | In the menu |
 |---|---|---|
@@ -33,15 +43,26 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 | MENU long (6 s) | calibrate temperature and humidity offsets | - |
 | ENTER | - | open item / store the edited value |
 | ENTER long (6 s) | factory reset (defaults) | in CALI: start the 250 s CO2 calibration countdown |
-| UP + DOWN, 1 s | toggle dark mode (LEDs dimmed by software PWM, duty in `src/leds.c`) | |
+| UP + DOWN, 1 s | toggle dark mode (LEDs dimmed, key click and start-up beep off, the alarm beep stays; software PWM, duty in `src/leds.c`; the setting is stored in flash) | |
 
 Menu items: 1 ALARM (UP/DOWN on/off), 2 PLANT (preset 0..9), 3 LOG (UP/DOWN select a sample, blinking in the chart, ENTER next quantity),
 4 CALI, 5 degC/degF, 6 ADV (low/high CO2 threshold of preset 0 and 1, steps of 10 ppm).
 The first key on a dark screen only wakes the backlight. 60 s without a key leaves the menu.
 
+## Hardware abstraction
+* LEDs: Zephyr LED API (`led_set_brightness`), driver `src/led_swpwm.c` (software PWM, binding in
+  `dts/bindings/`, node `leds` in the board dts). Dark mode = 12 % brightness (`DARK_PCT` in `src/leds.c`).
+* Buzzer: Zephyr buzzer API with the `gpio-buzzer` node `buzzer` (active buzzer on PC1).
+* LCD: `lcd_flush_if_changed()` sends the frame buffer only when it changed (plus a refresh every 10 s).
+* `prj.conf` needs `CONFIG_LED=y` and `CONFIG_BUZZER=y`.
+* `dts/bindings/vendor-prefixes.txt` registers the vendor prefix `voltcraft` (silences the devicetree warning).
+* The CMake warning "No SOURCES given to Zephyr library: drivers__led" is harmless: the LED driver is in the application, not in Zephyr's drivers/led.
+
 ## Storage
-Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with NVS in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
-Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
+Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with the Zephyr settings subsystem (NVS backend, one key per item under `co110/`) in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
+Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_SETTINGS`, `CONFIG_SETTINGS_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
+
+Board peripherals as standard Zephyr devices: LEDs (LED API, `led_swpwm.c`), buzzer (buzzer API), LCD backlight (`gpio-leds` node, `backlight.h`), CM1106S supply (`regulator-fixed`, regulator API, needs `CONFIG_REGULATOR`), PC13 and PA2 (`gpio-hog` nodes in the board dts, purpose unknown). The LCD bit-bang pins and the touch keys are still plain GPIOs in the `zephyr,user` node.
 
 ## Project rule: debug in sleep
 Every firmware on this board must allow debugging in sleep, because NRST is not reachable and
@@ -59,3 +80,17 @@ Nothing is damaged; the original firmware is in `co110_flash_full.bin`.
 2. Tie the BOOT0 pin (pin 60) to 3V3, power-cycle, then
    `STM32_Programmer_CLI -c port=SWD freq=480 -e all`, remove the wire, power-cycle and flash again.
 3. If NRST were ever wired to the ST-Link (pin 7): `STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst freq=480 -e all`.
+
+## Watchdog
+Zephyr task watchdog (`src/watchdog.c`) on the IWDG (`&iwdg` enabled in the board dts, `CONFIG_WATCHDOG`,
+`CONFIG_TASK_WDT`, `CONFIG_TASK_WDT_HW_FALLBACK`). The UI thread (3 s), the SHT30 thread (15 s) and the
+CM1106S thread (20 s) each feed their own channel once per loop; a stuck thread or a hung system resets the device.
+
+## Unit tests (`tests/logic`)
+Alarm zones, the UI state machine and the start-up sequence run without hardware (the display, settings,
+history and LED modules are replaced by stubs). native_sim needs Linux, so use WSL:
+
+    west build -b native_sim tests/logic -p auto -t run
+
+or run them on the nucleo board: `west build -b nucleo_h723zg tests/logic -p auto` and `west flash`
+(the results are printed on its serial console).

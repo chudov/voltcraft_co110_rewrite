@@ -18,8 +18,9 @@
 	};
 
 	/* LEDs are active low (anode to 3V3) */
-	leds {
-		compatible = "gpio-leds";
+	/* dimmable LEDs: software PWM driver (src/led_swpwm.c), Zephyr LED API */
+	leds: leds {
+		compatible = "voltcraft,swpwm-leds";
 		led_power: led_power {	/* LD1, green */
 			gpios = <&gpiob 15 GPIO_ACTIVE_LOW>;
 		};
@@ -34,6 +35,27 @@
 		};
 	};
 
+	/* active buzzer: Zephyr buzzer API */
+	buzzer: buzzer {
+		compatible = "gpio-buzzer";
+		gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
+	};
+
+	/* LCD backlight: Zephyr LED API (on/off), see src/backlight.h */
+	backlight_leds: backlight {
+		compatible = "gpio-leds";
+		led_backlight: led_backlight {
+			gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	/* CM1106S supply: Zephyr regulator API (off at boot, the sensor thread switches it on) */
+	sensor_supply: sensor-supply {
+		compatible = "regulator-fixed";
+		regulator-name = "cm1106s-supply";
+		enable-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
+	};
+
 	zephyr,user {
 		/* HT1625-style LCD controller, bit-banged */
 		lcd-cs-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;	/* active low on the wire, driven raw */
@@ -41,11 +63,7 @@
 		lcd-data-gpios = <&gpioc 7 GPIO_ACTIVE_HIGH>;
 		lcd-rd-gpios = <&gpioc 9 GPIO_ACTIVE_HIGH>;
 
-		backlight-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
-		sensor-power-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;	/* CM1106S supply */
-		aux-pc13-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;	/* set high by the original firmware, purpose unknown */
-		aux-pa2-gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>;	/* driven low after boot, purpose unknown */
 
 		/* touch controller outputs, active low */
 		up-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
@@ -69,6 +87,10 @@
 	};
 };
 
+&iwdg {
+	status = "okay";
+};
+
 &clk_lsi {
 	status = "okay";
 };
@@ -87,9 +109,29 @@
 	apb2-prescaler = <1>;
 };
 
-&gpioa { status = "okay"; };
+&gpioa {
+	status = "okay";
+
+	/* PA2: driven low by the original firmware, purpose unknown */
+	aux_pa2_hog: aux-pa2-hog {
+		gpio-hog;
+		gpios = <2 GPIO_ACTIVE_HIGH>;
+		output-low;
+	};
+};
+
 &gpiob { status = "okay"; };
-&gpioc { status = "okay"; };
+
+&gpioc {
+	status = "okay";
+
+	/* PC13: set high by the original firmware, purpose unknown */
+	aux_pc13_hog: aux-pc13-hog {
+		gpio-hog;
+		gpios = <13 GPIO_ACTIVE_HIGH>;
+		output-high;
+	};
+};
 
 /* CM1106S CO2 sensor, 9600 8N1 */
 &usart1 {

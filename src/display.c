@@ -1,5 +1,6 @@
 /* Drawing layer of the CO-110 LCD, built on lcd_fb and the measured segment map. */
 #include <stdlib.h>
+#include <zephyr/sys/util.h>
 #include "display.h"
 #include "lcd.h"
 #include "lcd_map.h"
@@ -72,7 +73,7 @@ void disp_co2(int ppm, enum disp_co2_mode mode)
 		if (ppm < 0) {
 			ppm = 0;
 		}
-		put_uint(lcd_digits_co2, 4, ppm > 9999 ? 9999 : ppm, 1, -1);
+		put_uint(lcd_digits_co2, 4, MIN(ppm, 9999), 1, -1);
 	}
 	lcd_set(LCD_SYM_CO2, true);
 	lcd_set(LCD_SYM_PP, true);
@@ -152,7 +153,7 @@ void disp_rh(int percent)
 	if (percent < 0) {
 		percent = 0;
 	}
-	put_uint(lcd_digits_rh, 2, percent > 99 ? 99 : percent, 1, -1);
+	put_uint(lcd_digits_rh, 2, MIN(percent, 99), 1, -1);
 	lcd_set(LCD_SYM_RH_PCT, true);
 }
 

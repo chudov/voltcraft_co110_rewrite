@@ -3,7 +3,7 @@
 #include "settings.h"
 #include "ui.h"
 
-#define ID_BASE 10
+static const char *const hist_key[4] = { NULL, "co110/hist1", "co110/hist2", "co110/hist3" };
 #define MAGIC 0x4849
 
 struct blob {
@@ -38,7 +38,7 @@ static void save_level(int level)
 			b.v[q][c] = (int16_t)ud.hist[level][q][c];
 		}
 	}
-	storage_put(ID_BASE + level, &b, sizeof(b));
+	storage_put(hist_key[level], &b, sizeof(b));
 }
 
 void history_load(void)
@@ -46,7 +46,7 @@ void history_load(void)
 	for (int level = 1; level < 4; level++) {
 		struct blob b;
 
-		if (storage_get(ID_BASE + level, &b, sizeof(b)) && b.magic == MAGIC &&
+		if (storage_get(hist_key[level], &b, sizeof(b)) && b.magic == MAGIC &&
 		    b.count <= DISP_CHART_COLS) {
 			ud.hist_count[level] = b.count;
 			for (int q = 0; q < 3; q++) {
@@ -82,6 +82,6 @@ void history_clear(void)
 	memset(ud.hist_count, 0, sizeof(ud.hist_count));
 	pushes = 0;
 	for (int level = 1; level < 4; level++) {
-		storage_delete(ID_BASE + level);
+		storage_delete(hist_key[level]);
 	}
 }
