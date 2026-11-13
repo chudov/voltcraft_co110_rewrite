@@ -248,6 +248,30 @@ ZTEST(ui, test_calibration_result_message)
 	zassert_equal(ui_cali_message(13000), UI_CALI_MSG_NONE);
 }
 
+ZTEST(ui, test_down_cycles_charts_and_auto_state)
+{
+	zassert_equal(ui_quantity(), DISP_Q_CO2);
+	zassert_true(ev(EV_DOWN));
+	zassert_equal(ui_quantity(), DISP_Q_RH);
+	zassert_true(ev(EV_DOWN));
+	zassert_equal(ui_quantity(), DISP_Q_TEMP);
+	zassert_false(ui_auto_cycle());
+	zassert_true(ev(EV_DOWN));                /* 4th state: automatic cycle, starts with temperature */
+	zassert_true(ui_auto_cycle());
+	zassert_equal(ui_quantity(), DISP_Q_TEMP);
+	ui_tick(T + 9999);
+	zassert_equal(ui_quantity(), DISP_Q_TEMP);
+	ui_tick(T + 10000);
+	zassert_equal(ui_quantity(), DISP_Q_CO2);
+	ui_tick(T + 20000);
+	zassert_equal(ui_quantity(), DISP_Q_RH);
+	ui_tick(T + 30000);
+	zassert_equal(ui_quantity(), DISP_Q_TEMP);
+	zassert_true(ev(EV_DOWN));                /* back to the CO2 chart */
+	zassert_false(ui_auto_cycle());
+	zassert_equal(ui_quantity(), DISP_Q_CO2);
+}
+
 ZTEST(ui, test_calibration_abort)
 {
 	zassert_true(ev(EV_MENU));

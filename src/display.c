@@ -112,6 +112,26 @@ void disp_co2_countdown(int n)
 	lcd_set(LCD_SYM_M, true);
 }
 
+/* start-up countdown frame of the original: the two digits without CO2 / ppm legend, all row arrows,
+ * the CO2, CHART and ppm markers of the top line and the MIN / MAX arrows on, MIN and MAX show 0 */
+void disp_startup_countdown(int n)
+{
+	n = CLAMP(n, 0, 99);
+	put_char(lcd_digits_co2[0], ' ', false);
+	put_char(lcd_digits_co2[1], n >= 10 ? '0' + n / 10 : ' ', false);
+	put_char(lcd_digits_co2[2], '0' + n % 10, false);
+	put_char(lcd_digits_co2[3], ' ', false);
+	put_uint(lcd_digits_min, 3, 0, 1, -1);
+	put_uint(lcd_digits_max, 3, 0, 1, -1);
+	for (int row = 0; row < 8; row++) {
+		lcd_set(LCD_ROW_ARROW(row), true);
+	}
+	lcd_set(LCD_SYM_CO2_TOP, true);
+	lcd_set(LCD_SYM_CHART_TOP, true);
+	lcd_set(LCD_SYM_MINMAX_ARROWS, true);
+	lcd_set(LCD_SYM_PPM_TOP, true);
+}
+
 void disp_blank_co2(void)
 {
 	for (int i = 0; i < 4; i++) {
@@ -133,11 +153,11 @@ void disp_blank_rh(void)
 	}
 }
 
-void disp_rh_text(char left, char right)
+void disp_rh_text(char left, char right, bool percent)
 {
 	put_char(lcd_digits_rh[0], left, false);
 	put_char(lcd_digits_rh[1], right, false);
-	lcd_set(LCD_SYM_RH_PCT, true);
+	lcd_set(LCD_SYM_RH_PCT, percent);
 }
 
 /* xx.x in three digits, '-' in the left digit for negative values */
@@ -232,7 +252,8 @@ void disp_chart(const int *values, int count, enum disp_quantity q,
 		lcd_fb[LCD_DOT_BYTE(16 - c)] = (uint8_t)((1u << level) - 1u);
 	}
 
-	/* quantity marker on the top line */
+	/* quantity marker on the top line; CHART is on all the time after the start-up */
+	lcd_set(LCD_SYM_CHART_TOP, true);
 	lcd_set(LCD_SYM_CO2_TOP, q == DISP_Q_CO2);
 	lcd_set(LCD_SYM_RH_TOP, q == DISP_Q_RH);
 	lcd_set(LCD_SYM_TEMP_TOP, q == DISP_Q_TEMP);

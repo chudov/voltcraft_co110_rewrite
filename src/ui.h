@@ -37,6 +37,9 @@ enum ui_cali_msg { UI_CALI_MSG_NONE, UI_CALI_MSG_DONE, UI_CALI_MSG_FAIL };
 void ui_show_cali_result(bool ok, int64_t now);
 enum ui_cali_msg ui_cali_message(int64_t now);
 
+bool ui_auto_cycle(void);       /* main screen: the charts change every 10 s */
+int ui_quantity(void);          /* chart shown on the main screen: enum disp_quantity */
+
 bool ui_calibrating(void);      /* the 250 s countdown runs */
 bool ui_calibration_due(void);  /* true once, when the countdown has ended */
 

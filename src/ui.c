@@ -14,6 +14,7 @@
 #define CALI_SECONDS 250
 #define ITEM_COUNT 6
 #define CALI_MSG_MS 3000
+#define CYCLE_MS 10000      /* chart change in the automatic cycle state */
 
 struct ui_data co110_ud;
 
@@ -23,6 +24,8 @@ static int edit_val;
 static int edit_phase;
 static int adv_low;
 static int quantity = DISP_Q_CO2;
+static bool auto_cycle;   /* 4th DOWN state: CO2, RH and temperature charts follow each other */
+static int64_t cycle_next;
 static int zoom;   /* chart level 0..3: 5 s, 5 min, 2 h, 12 h per division */
 static int sel;    /* selected column in the LOG screen, 0 = newest */
 static int64_t last_input;
@@ -98,8 +101,10 @@ static enum smf_state_result go(struct ui_obj *o, int state)
 /* --- main screen --- */
 static void main_entry(void *x)
 {
-	ARG_UNUSED(x);
+	struct ui_obj *o = x;
+
 	st = UI_MAIN;
+	cycle_next = o->now + CYCLE_MS;
 }
 
 static enum smf_state_result main_run(void *x)
@@ -108,7 +113,16 @@ static enum smf_state_result main_run(void *x)
 
 	switch (o->ev) {
 	case EV_DOWN:
-		quantity = (quantity + 1) % 3;
+		/* CO2 -> RH -> temperature -> automatic cycle -> CO2 */
+		if (auto_cycle) {
+			auto_cycle = false;
+			quantity = DISP_Q_CO2;
+		} else if (quantity == DISP_Q_TEMP) {
+			auto_cycle = true; /* starts with the temperature chart */
+			cycle_next = o->now + CYCLE_MS;
+		} else {
+			quantity++;
+		}
 		return acted(o);
 	case EV_UP:
 		zoom = (zoom + 1) % 4;
@@ -475,6 +489,9 @@ enum ui_screen ui_current_screen(void)
 
 void ui_init(void)
 {
+	quantity = DISP_Q_CO2;
+	auto_cycle = false;
+	zoom = 0;
 	smf_set_initial(SMF_CTX(&uo), &states[S_MAIN]);
 }
 
@@ -485,8 +502,15 @@ bool ui_event(enum ui_event ev, int64_t now)
 	return uo.acted;
 }
 
+bool ui_auto_cycle(void) { return auto_cycle; }
+int ui_quantity(void) { return quantity; }
+
 void ui_tick(int64_t now)
 {
+	if (auto_cycle && st == UI_MAIN && now >= cycle_next) {
+		quantity = (quantity + 1) % 3;
+		cycle_next = now + CYCLE_MS;
+	}
 	if (cali_running && now >= cali_end) {
 		feed(EV_CALI_END, now);
 	} else if (st != UI_MAIN && now - last_input > MENU_TIMEOUT_MS) {
@@ -541,9 +565,9 @@ void ui_render(int64_t now)
 	/* humidity */
 	if (st == UI_ADV) {
 		if (edit_phase == 0) {
-			disp_rh_text('L', '0');
+			disp_rh_text('L', '0', false);
 		} else {
-			disp_rh_text('H', 'I');
+			disp_rh_text('H', 'I', false);
 		}
 	} else if (st == UI_OFFSET && edit_phase == 1) {
 		if (blink) {

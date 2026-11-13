@@ -13,9 +13,10 @@ enum disp_quantity { DISP_Q_CO2, DISP_Q_RH, DISP_Q_TEMP };
 void disp_clear(void);
 
 void disp_co2(int ppm, enum disp_co2_mode mode);
+void disp_startup_countdown(int n);              /* start-up frame: 2 digits, arrows, MIN/MAX 0, no CO2 ppm */
 void disp_co2_text(const char text[4]);          /* four characters, see glyph() in display.c */
 void disp_co2_countdown(int n);                   /* two digits in the middle of the CO2 digits */
-void disp_rh_text(char left, char right);       /* e.g. 'L','0' = Lo, 'H','I' = Hi */
+void disp_rh_text(char left, char right, bool percent); /* e.g. 'L','0' = Lo, 'H','I' = Hi */
 void disp_blank_co2(void);
 void disp_blank_temp(void);
 void disp_blank_rh(void);

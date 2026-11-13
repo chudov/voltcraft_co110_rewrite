@@ -106,15 +106,15 @@ void startup_render(int preset)
 	case SU_LO1:
 	case SU_LO2:
 		disp_co2(low, DISP_CO2_VALUE);
-		disp_rh_text('L', '0');
+		disp_rh_text('L', '0', true);
 		break;
 	case SU_HI1:
 	case SU_HI2:
 		disp_co2(high, DISP_CO2_VALUE);
-		disp_rh_text('H', 'I');
+		disp_rh_text('H', 'I', true);
 		break;
 	case SU_COUNT:
-		disp_co2_countdown(30 - (int)((su.now - su.entered) / 1000));
+		disp_startup_countdown(30 - (int)((su.now - su.entered) / 1000));
 		break;
 	default: /* SU_LD1, SU_DONE: blank display */
 		break;
