@@ -1,0 +1,15 @@
+description: |
+  Cubic CM1106S NDIR CO2 sensor, UART interface (9600 8N1).
+  Declare the node as a child of the UART it is connected to. The sensor supply
+  can be given as a regulator; the driver switches it on when the device is
+  resumed and off when it is suspended (PM_DEVICE_ACTION_SUSPEND), so the
+  application can power cycle the sensor with pm_device_action_run().
+
+compatible: "cubic,cm1106s"
+
+include: [sensor-device.yaml, uart-device.yaml]
+
+properties:
+  vin-supply:
+    type: phandle
+    description: Regulator that powers the sensor (optional)

@@ -49,7 +49,7 @@
 		};
 	};
 
-	/* CM1106S supply: Zephyr regulator API (off at boot, the sensor thread switches it on) */
+	/* CM1106S supply: regulator-fixed, off at boot; the cm1106s driver node switches it (PM resume/suspend) */
 	sensor_supply: sensor-supply {
 		compatible = "regulator-fixed";
 		regulator-name = "cm1106s-supply";
@@ -133,12 +133,17 @@
 	};
 };
 
-/* CM1106S CO2 sensor, 9600 8N1 */
+/* CM1106S CO2 sensor, 9600 8N1 (driver: src/cm1106s.c, Zephyr sensor API) */
 &usart1 {
 	pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
 	pinctrl-names = "default";
 	current-speed = <9600>;
 	status = "okay";
+
+	cm1106s: cm1106s {
+		compatible = "cubic,cm1106s";
+		vin-supply = <&sensor_supply>;
+	};
 };
 
 /* SHT30 temperature/humidity sensor at 0x44 */
