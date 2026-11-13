@@ -103,6 +103,7 @@ Two-phase state machine, one phase per call:
 - Parse (next call): scan the buffer for header `16 05 01` (response length 5, command 1); checksum = `0x100 − (sum of the first 7 bytes & 0xFF)` must equal byte 7. Valid frame → **CO2 ppm = byte3·256 + byte4**, timeout counter and error flag cleared. (A frame whose byte sum is 0 mod 256 would be rejected – negligible.)
 - Timeout: counter incremented on each call; above 39 (≈ 40 polls ≈ 200 s if polled every 5 s) the error flag is set, a "sensor lost" flag is raised and **PC2 is driven low = CM1106S power/enable off** (`FUN_08000930(0)`); PC2 was set high at boot. What powers it back on and clears the error flag is in the UI code (stage 3/5) [?].
 - The scan reads up to 7 bytes beyond the start index, so a frame wrapping the end of the buffer is not handled; the next request is simply used instead [I].
+- Cross-checked against the manufacturer datasheet (section 15): request, answer format, checksum and CO2 formula are identical. The original firmware uses only commands 0x01 (read CO2) and 0x03 (calibration).
 
 ### 7.3 Trend log hierarchy (`FUN_08006c64`, `FUN_08006d68`) [V arithmetic, I meaning]
 
@@ -232,6 +233,7 @@ State 0x200000BC: 0 = off; 1 = on while an alarm is active (cleared back to 0 wh
 
 ### 10.4 CO2 calibration command (`FUN_080062a0(400)`) [V]
 CM1106S zero-point calibration frame, 6 bytes: `11 03 03 01 90 CS` with CS = 0x100 − (sum of the first 5 bytes) = 0x58 (400 ppm = 0x0190). Expected reply `16 01 03 E6`; up to 10 attempts with a 50-unit delay between them. The function blocks the main loop while it runs. The countdown before it (250 s) is intended for the sensor to sit in fresh air.
+Datasheet 4.3: target range 400-1500 ppm, and the ambient CO2 must have been at the target value for 2 minutes before the command is sent (consistent with the 250 s countdown). Section 15.
 
 ### 10.5 Start-up sequence (UI state 5, `FUN_08007360` / `FUN_080076a8`) [V]
 Step counter 0x20000064 (1…9), seconds counter 0x20000062 decremented by TIM1:
@@ -328,3 +330,34 @@ The full per-bit list is in `co110-zephyr/LED_mapping.txt` and, as C tables, in 
 - Bell (34,2) and "cross on the bell" (35,1) as in 13.3.
 
 **Port status**: `co110-zephyr/src/display.c` already renders the CO2/RH/temperature numbers, MIN/MAX numbers, chart, zoom labels, menu underlines, alarm and mode symbols from this map (demo application, step 2 of the Zephyr plan).
+
+## 15. CM1106S protocol (datasheet CM1106S-W V0.1, 2020-06-18, Cubic) [datasheet]
+
+UART 9600 8N1, no flow control. Frame: request `11 LEN CMD DATA.. CS`, reply `16 LEN CMD DATA.. CS`; LEN = 1 + number of data bytes (CMD + DATA); CS = 256 − (sum of all previous bytes) mod 256, so the sum of a complete frame is 0 mod 256. 16-bit values: high byte first. Sensor facts: range 0-5000 ppm, sampling 1 s, time to first reading 30 s, supply 4.5-5.5 V.
+
+| CMD | Function | Request | Reply | Used by the original firmware |
+|---|---|---|---|---|
+| 0x01 | read CO2 | `11 01 01 ED` | `16 05 01 D1 D2 D3 D4 CS`, CO2 = D1·256 + D2 ppm (D3, D4 reserved) | yes, every 5 s |
+| 0x03 | calibrate to a reference value | `11 03 03 HI LO CS`, target 400-1500 ppm | `16 01 03 E6` | yes, 400 ppm after the CALI countdown |
+| 0x10 | auto calibration (ABC) | `11 07 10 64 EN DAYS BH BL 64 CS` | `16 01 10 D9` | no |
+| 0x1F | serial number | `11 01 1F CF` | `16 0B 1F SN1..SN5 CS`, five numbers of 0-9999 (2 bytes each) | no |
+| 0x1E | software version | `11 01 1E D0` | `16 0C 1E` + 10 ASCII characters + 1 reserved byte + CS | no |
+
+ABC: `EN` = 0 on, 2 off; `DAYS` = cycle 1-30 (default 7); `BH BL` = base value in ppm (default 400 = `01 90`). The sensor starts with ABC on, 7 days, 400 ppm. After the first 24 h of continuous operation it takes the lowest value of that period as 400 ppm, then repeats the correction every 7 days; this assumes that the air reaches fresh-air level (about 400 ppm) at least once per cycle, otherwise the baseline drifts (datasheet page 6, which recommends manual calibration in that case). There is no command to read the ABC setting back. The original firmware never changes it, so the device runs with ABC on.
+
+Datasheet inconsistencies (checked by recomputing the examples):
+- The ABC text names "DF4 high base value (2 bytes), DF5 low base value (2 bytes)", but the frames in the examples have exactly 6 data bytes `64 EN DAYS 01 90 64`; the examples (checksums 76, 78, 75 are correct) are followed: one 2-byte base value.
+- The checksum of the software version example (`97`) does not match its bytes (they sum to `9C`); all other examples are consistent.
+- Not specified: allowed range of the ABC base value, byte order of the serial number numbers (high byte first assumed), error replies.
+
+## 16. Zephyr re-implementation: state (see also `co110-zephyr/README.md`)
+
+Architecture: UI thread = main (k_msgq, Zephyr SMF for screens and start-up), sensor threads (SHT30 4 s, CM1106S 5 s), input subsystem for the touch keys, settings subsystem on NVS, task watchdog on the IWDG. Standard Zephyr APIs used for the hardware: LED API (custom software-PWM driver for the dimmable LEDs), buzzer API, gpio-leds backlight, regulator API (CM1106S supply) switched by the PM actions of the CM1106S sensor driver, gpio-hog nodes (PC13 high, PA2 low as in the original, purpose unknown), SHT3xD driver, `gpio-keys` + `zephyr,input-longpress`.
+
+Original function to Zephyr module: sensor poll (7.1/7.2) to `sensor_tasks.c`, `sht30.c`, `cm1106s.c`; buttons (8.1) to `input.c`; UI states (8.3) to `ui.c`; LCD (9) to `lcd.c`, `display.c`, `lcd_map.h`; alarm/buzzer/backlight (10.1-10.3) to `alarm.c`, `leds.c`, `live.c`; calibration (10.4) to the CM1106S driver calibration attribute; start-up (10.5) to `startup.c`; flash storage (11) to `settings.c`, `history.c`.
+
+Verified on the device: start-up sequence, live values and chart with the four zoom levels, quantity selection, menu (ALARM, PLANT, LOG, CALI, unit, ADV), offset calibration, factory reset, dark mode, alarm zones/LEDs/buzzer, backlight, persistence of settings and of the 5 min and 2 h history after a power cycle (12 h level after ~18 h with the earlier storage version), full CALI cycle, CM1106S sensor driver (read and calibration), input subsystem keys (short, long 6 s, auto repeat, UP+DOWN chord).
+Not verified on the device: the ABC, serial number and version commands of the driver, the sensor power cycle after 40 failed polls, the ~550 ppm warm-up values (hidden by the start-up countdown), the 12 h history level after a power cycle with the settings subsystem, the unit tests in `tests/logic`.
+Difference from the original (addition): dark mode (UP+DOWN 1 s, as in the patched original firmware) is stored in flash and also silences the start-up beep and the key click; the alarm beep is unchanged.
+Still unknown: purpose of PC13 and PA2, the row arrows (byte 26), battery/CHART/cycle symbols, `%VOL`; the LOG cursor direction and the limits of the ADV and offset editors are design guesses.
+
