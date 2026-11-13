@@ -1,131 +1,146 @@
 /*
- * Touch keys (outputs of the capacitive controller, active low).
- * A GPIO interrupt on every edge starts a work item that scans the keys; while a key is down it
- * reschedules itself every 10 ms (long press, auto repeat), otherwise nothing runs.
- *   UP / DOWN   event on release (>= 40 ms), auto repeat after 0.6 s every 40 ms
- *   MENU / ENTER short on release (>= 40 ms), long after 6 s
- *   UP + DOWN   held 1 s: MSG_COMBO (dark mode), no UP/DOWN events for that touch
+ * Touch keys with the Zephyr input subsystem.
+ *   devicetree: gpio-keys node "keys" (outputs of the capacitive controller, active low, debounced)
+ *               zephyr,input-longpress node "longpress" for MENU and ENTER (short / 6 s long)
+ *
+ *   MENU / ENTER  longpress device: short press (event on release) or long press (event after 6 s)
+ *   UP / DOWN     raw key events: event on release, auto repeat after 0.6 s every 40 ms
+ *   UP + DOWN     held 1 s: MSG_COMBO (dark mode), no UP/DOWN events for that touch
+ *
+ * The callbacks run in the input thread, the timers are delayable work items of the system
+ * work queue; the shared state is protected by a mutex. Everything is posted to the UI thread.
  */
 #include <errno.h>
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/input/input.h>
 #include "app.h"
 #include "ui.h"
 
-#define U DT_PATH(zephyr_user)
-#define GPIO_KEY(name) GPIO_DT_SPEC_GET(U, name)
-
-enum { KB_UP, KB_DOWN, KB_MENU, KB_ENTER, KB_COUNT };
-static const struct gpio_dt_spec keys[KB_COUNT] = {
-	GPIO_KEY(up_gpios), GPIO_KEY(down_gpios), GPIO_KEY(menu_gpios), GPIO_KEY(enter_gpios),
-};
-
-#define SCAN_MS 10
-#define SHORT_MS 40
 #define REPEAT_START_MS 600
 #define REPEAT_EVERY_MS 40
-#define LONG_MS 6000
 #define COMBO_MS 1000
 
-static struct k_work_delayable scan_work;
-static struct gpio_callback key_cb;
+static const struct device *const keys_dev = DEVICE_DT_GET(DT_NODELABEL(keys));
+static const struct device *const longpress_dev = DEVICE_DT_GET(DT_NODELABEL(longpress));
 
-static int64_t down_at[KB_COUNT] = { -1, -1, -1, -1 };
-static int64_t next_repeat[KB_COUNT];
-static bool fired[KB_COUNT];
-static bool suppress[KB_COUNT];
-static int64_t combo_at = -1;
-static bool combo_done;
+enum { KB_UP, KB_DOWN, KB_COUNT };
 
-static void scan(struct k_work *work)
+static struct k_mutex in_lock;
+static struct k_work_delayable repeat_work[KB_COUNT];
+static struct k_work_delayable combo_work;
+static bool pressed[KB_COUNT];
+static bool fired[KB_COUNT];    /* auto repeat has produced events, no event on release */
+static bool suppress[KB_COUNT]; /* part of the UP + DOWN chord */
+
+static enum ui_event up_down_event(int k)
+{
+	return k == KB_UP ? EV_UP : EV_DOWN;
+}
+
+static void repeat_fn(struct k_work *work)
+{
+	struct k_work_delayable *dw = k_work_delayable_from_work(work);
+	int k = dw - repeat_work;
+
+	k_mutex_lock(&in_lock, K_FOREVER);
+	if (pressed[k] && !suppress[k]) {
+		fired[k] = true;
+		post(MSG_KEY, up_down_event(k), 0);
+		k_work_reschedule(dw, K_MSEC(REPEAT_EVERY_MS));
+	}
+	k_mutex_unlock(&in_lock);
+}
+
+static void combo_fn(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	int64_t now = k_uptime_get();
-	bool pressed[KB_COUNT];
-	bool busy = false;
-
-	for (int k = 0; k < KB_COUNT; k++) {
-		pressed[k] = gpio_pin_get_dt(&keys[k]) > 0;
-	}
-
+	k_mutex_lock(&in_lock, K_FOREVER);
 	if (pressed[KB_UP] && pressed[KB_DOWN]) {
-		suppress[KB_UP] = suppress[KB_DOWN] = true;
-		if (combo_at < 0) {
-			combo_at = now;
-		} else if (!combo_done && now - combo_at >= COMBO_MS) {
-			combo_done = true;
-			post(MSG_COMBO, 0, 0);
+		post(MSG_COMBO, 0, 0);
+	}
+	k_mutex_unlock(&in_lock);
+}
+
+static void up_down_change(int k, bool down)
+{
+	k_mutex_lock(&in_lock, K_FOREVER);
+	pressed[k] = down;
+	if (down) {
+		if (pressed[KB_UP] && pressed[KB_DOWN]) {
+			suppress[KB_UP] = suppress[KB_DOWN] = true;
+			k_work_cancel_delayable(&repeat_work[KB_UP]);
+			k_work_cancel_delayable(&repeat_work[KB_DOWN]);
+			k_work_reschedule(&combo_work, K_MSEC(COMBO_MS));
+		} else {
+			k_work_reschedule(&repeat_work[k], K_MSEC(REPEAT_START_MS));
 		}
 	} else {
-		combo_at = -1;
-		combo_done = false;
-	}
-
-	for (int k = 0; k < KB_COUNT; k++) {
-		bool updown = (k == KB_UP || k == KB_DOWN);
-		enum ui_event e_short = k == KB_UP ? EV_UP : k == KB_DOWN ? EV_DOWN :
-					k == KB_MENU ? EV_MENU : EV_ENTER;
-
-		if (pressed[k]) {
-			busy = true;
-			if (down_at[k] < 0) {
-				down_at[k] = now;
-				next_repeat[k] = now + REPEAT_START_MS;
-			}
-			if (suppress[k]) {
-				continue;
-			}
-			if (updown && now >= next_repeat[k]) {
-				fired[k] = true;
-				next_repeat[k] = now + REPEAT_EVERY_MS;
-				post(MSG_KEY, e_short, 0);
-			} else if (!updown && !fired[k] && now - down_at[k] >= LONG_MS) {
-				fired[k] = true;
-				post(MSG_KEY, k == KB_MENU ? EV_MENU_LONG : EV_ENTER_LONG, 0);
-			}
-		} else {
-			if (down_at[k] >= 0 && now - down_at[k] >= SHORT_MS && !fired[k] &&
-			    !suppress[k]) {
-				post(MSG_KEY, e_short, 0);
-			}
-			down_at[k] = -1;
-			fired[k] = false;
-			suppress[k] = false;
+		k_work_cancel_delayable(&repeat_work[k]);
+		k_work_cancel_delayable(&combo_work);
+		if (!fired[k] && !suppress[k]) {
+			post(MSG_KEY, up_down_event(k), 0);
 		}
+		fired[k] = false;
+		suppress[k] = false;
 	}
-
-	if (busy) {
-		k_work_reschedule(&scan_work, K_MSEC(SCAN_MS));
-	}
+	k_mutex_unlock(&in_lock);
 }
 
-static void key_isr(const struct device *port, struct gpio_callback *cb, uint32_t pins)
+/* raw key events of the gpio-keys device: only UP and DOWN are used here */
+static void keys_cb(struct input_event *evt, void *user_data)
 {
-	ARG_UNUSED(port);
-	ARG_UNUSED(cb);
-	ARG_UNUSED(pins);
+	ARG_UNUSED(user_data);
 
-	k_work_reschedule(&scan_work, K_NO_WAIT);
-}
-
-int input_init(void)
-{
-	uint32_t mask = 0;
-
-	k_work_init_delayable(&scan_work, scan);
-	for (int k = 0; k < KB_COUNT; k++) {
-		if (!gpio_is_ready_dt(&keys[k])) {
-			return -ENODEV;
-		}
-		gpio_pin_configure_dt(&keys[k], GPIO_INPUT);
-		mask |= BIT(keys[k].pin);
+	if (evt->type != INPUT_EV_KEY) {
+		return;
 	}
-	/* all four keys are on the same GPIO port */
-	gpio_init_callback(&key_cb, key_isr, mask);
-	gpio_add_callback(keys[0].port, &key_cb);
+	if (evt->code == INPUT_KEY_UP) {
+		up_down_change(KB_UP, evt->value != 0);
+	} else if (evt->code == INPUT_KEY_DOWN) {
+		up_down_change(KB_DOWN, evt->value != 0);
+	}
+}
+INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(keys)), keys_cb, NULL);
+
+/* short and long press events of MENU and ENTER (longpress device) */
+static void longpress_cb(struct input_event *evt, void *user_data)
+{
+	ARG_UNUSED(user_data);
+
+	if (evt->type != INPUT_EV_KEY || evt->value == 0) {
+		return; /* releases are of no interest */
+	}
+	switch (evt->code) {
+	case INPUT_KEY_MENU:
+		post(MSG_KEY, EV_MENU, 0);
+		break;
+	case INPUT_KEY_ENTER:
+		post(MSG_KEY, EV_ENTER, 0);
+		break;
+	case INPUT_KEY_F1:
+		post(MSG_KEY, EV_MENU_LONG, 0);
+		break;
+	case INPUT_KEY_F2:
+		post(MSG_KEY, EV_ENTER_LONG, 0);
+		break;
+	default:
+		break;
+	}
+}
+INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(longpress)), longpress_cb, NULL);
+
+int co110_input_init(void)
+{
+	k_mutex_init(&in_lock);
 	for (int k = 0; k < KB_COUNT; k++) {
-		gpio_pin_interrupt_configure_dt(&keys[k], GPIO_INT_EDGE_BOTH);
+		k_work_init_delayable(&repeat_work[k], repeat_fn);
+	}
+	k_work_init_delayable(&combo_work, combo_fn);
+
+	if (!device_is_ready(keys_dev) || !device_is_ready(longpress_dev)) {
+		return -ENODEV;
 	}
 	return 0;
 }

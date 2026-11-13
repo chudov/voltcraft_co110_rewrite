@@ -3,6 +3,7 @@
 #include <st/l4/stm32l431r(b-c)tx-pinctrl.dtsi>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
 	model = "Voltcraft CO-110 CO2 monitor";
@@ -56,6 +57,38 @@
 		enable-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
 	};
 
+	/* touch controller outputs (FTC334C), active low, push to the input subsystem */
+	keys: keys {
+		compatible = "gpio-keys";
+		debounce-interval-ms = <40>;
+		key_up: key_up {
+			gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_UP>;
+		};
+		key_down: key_down {
+			gpios = <&gpioa 5 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_DOWN>;
+		};
+		key_menu: key_menu {
+			gpios = <&gpioa 6 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_MENU>;
+		};
+		key_enter: key_enter {
+			gpios = <&gpioa 7 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+		};
+	};
+
+	/* MENU / ENTER: short press on release, long press (6 s) as F1 / F2 */
+	longpress: longpress {
+		compatible = "zephyr,input-longpress";
+		input = <&keys>;
+		input-codes = <INPUT_KEY_MENU>, <INPUT_KEY_ENTER>;
+		short-codes = <INPUT_KEY_MENU>, <INPUT_KEY_ENTER>;
+		long-codes = <INPUT_KEY_F1>, <INPUT_KEY_F2>;
+		long-delay-ms = <6000>;
+	};
+
 	zephyr,user {
 		/* HT1625-style LCD controller, bit-banged */
 		lcd-cs-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;	/* active low on the wire, driven raw */
@@ -65,7 +98,8 @@
 
 		buzzer-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
 
-		/* touch controller outputs, active low */
+		/* touch controller outputs, active low; only used by the demo and bit-map test variants,
+		 * the live application reads the keys through the "keys" gpio-keys node above */
 		up-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
 		down-gpios = <&gpioa 5 GPIO_ACTIVE_LOW>;
 		menu-gpios = <&gpioa 6 GPIO_ACTIVE_LOW>;

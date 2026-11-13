@@ -143,7 +143,7 @@ int main(void)
 	co110_settings_init();
 	history_load();
 	leds_set_dark(g_set.dark_mode);
-	input_init();
+	co110_input_init();
 	ui_init();
 
 	t0 = k_uptime_get();

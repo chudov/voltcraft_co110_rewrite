@@ -34,7 +34,7 @@ static inline void post(enum msg_type type, int a, int b)
 extern struct k_sem cali_sem;       /* given when the 400 ppm calibration has to be sent */
 extern volatile bool co2_suspended; /* true during the 250 s calibration countdown */
 
-/* touch keys: GPIO interrupts + work item, posts MSG_KEY / MSG_COMBO */
-int input_init(void);
+/* touch keys: input subsystem callbacks, posts MSG_KEY / MSG_COMBO */
+int co110_input_init(void);
 
 #endif
