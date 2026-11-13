@@ -1,1 +1,2 @@
 voltcraft	Voltcraft
+cubic	Cubic Sensor and Instrument Co., Ltd
