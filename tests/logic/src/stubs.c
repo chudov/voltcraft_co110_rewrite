@@ -54,6 +54,7 @@ void lcd_fill(uint8_t value)
 void disp_clear(void) {}
 void disp_co2(int ppm, enum disp_co2_mode mode) { ARG_UNUSED(ppm); ARG_UNUSED(mode); }
 void disp_co2_countdown(int n) { ARG_UNUSED(n); }
+void disp_co2_text(const char text[4]) { ARG_UNUSED(text); }
 void disp_rh_text(char l, char r) { ARG_UNUSED(l); ARG_UNUSED(r); }
 void disp_blank_co2(void) {}
 void disp_blank_temp(void) {}

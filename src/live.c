@@ -92,6 +92,10 @@ static void handle(const struct msg *m, int64_t now)
 		wake_backlight();
 		break;
 
+	case MSG_CALI_RESULT:
+		ui_show_cali_result(m->a != 0, now);
+		break;
+
 	case MSG_TH:
 		co110_ud.t_raw = m->a;
 		co110_ud.rh_raw = m->b;

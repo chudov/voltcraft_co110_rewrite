@@ -56,7 +56,7 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 | MENU short | open menu | next item, after the last one leave; cancel an edit |
 | MENU long (6 s) | calibrate temperature and humidity offsets | - |
 | ENTER | - | open item / store the edited value |
-| ENTER long (6 s) | factory reset (defaults) | in CALI: start the 250 s CO2 calibration countdown |
+| ENTER long (6 s) | factory reset (defaults) | in CALI: start the 250 s CO2 calibration countdown; afterwards the main screen shows `donE` (calibration confirmed) or `FAIL` for 3 s in the CO2 digits |
 | UP + DOWN, 1 s | toggle dark mode (LEDs dimmed, key click and start-up beep off, the alarm beep stays; software PWM, duty in `src/leds.c`; the setting is stored in flash) | |
 
 Menu items: 1 ALARM (UP/DOWN on/off), 2 PLANT (preset 0..9), 3 LOG (UP/DOWN select a sample, blinking in the chart, ENTER next quantity),
@@ -88,6 +88,7 @@ or the STM32 HAL headers (no output = no hit):
     python tools/check_names.py C:\path\to\zephyr C:\path\to\modules\hal\stm32
 
 Run it after adding names. Names that are only `static` inside a `.c` file are not a problem.
+Last audit (all 191 names, Zephyr 4.5.99 tree): no clash. The only hits were the words `msg`, `settings`, `zone` in comments and local variables, `backlight_set` as a member of the auxdisplay driver API struct and `enum msg_type` inside a private `.c` file of the IPC service.
 
 ## Project rule: debug in sleep
 Every firmware on this board must allow debugging in sleep, because NRST is not reachable and

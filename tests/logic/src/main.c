@@ -236,6 +236,18 @@ ZTEST(ui, test_calibration_countdown)
 	zassert_false(ui_calibration_due());  /* reported only once */
 }
 
+ZTEST(ui, test_calibration_result_message)
+{
+	zassert_equal(ui_cali_message(0), UI_CALI_MSG_NONE);
+	ui_show_cali_result(true, 1000);
+	zassert_equal(ui_cali_message(1000), UI_CALI_MSG_DONE);
+	zassert_equal(ui_cali_message(3999), UI_CALI_MSG_DONE);
+	zassert_equal(ui_cali_message(4000), UI_CALI_MSG_NONE);
+	ui_show_cali_result(false, 10000);
+	zassert_equal(ui_cali_message(10500), UI_CALI_MSG_FAIL);
+	zassert_equal(ui_cali_message(13000), UI_CALI_MSG_NONE);
+}
+
 ZTEST(ui, test_calibration_abort)
 {
 	zassert_true(ev(EV_MENU));

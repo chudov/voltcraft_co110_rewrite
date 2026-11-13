@@ -86,7 +86,7 @@ static void co2_thread(void *a, void *b, void *c)
 		co110_wdt_feed(wdt);
 		/* wake up for the next poll or earlier for a calibration request */
 		if (k_sem_take(&cali_sem, K_TIMEOUT_ABS_MS(next)) == 0) {
-			(void)co2_calibrate(400);
+			co110_post(MSG_CALI_RESULT, co2_calibrate(400) ? 1 : 0, 0);
 			next = k_uptime_get() + 2000;
 			continue;
 		}

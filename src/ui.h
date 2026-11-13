@@ -32,6 +32,11 @@ bool ui_event(enum ui_event ev, int64_t now);
 void ui_tick(int64_t now);      /* menu time-out, calibration countdown */
 void ui_render(int64_t now);    /* draws the frame buffer, call lcd_flush() afterwards */
 
+/* result of the 400 ppm calibration, shown for 3 s in the CO2 digits of the main screen */
+enum ui_cali_msg { UI_CALI_MSG_NONE, UI_CALI_MSG_DONE, UI_CALI_MSG_FAIL };
+void ui_show_cali_result(bool ok, int64_t now);
+enum ui_cali_msg ui_cali_message(int64_t now);
+
 bool ui_calibrating(void);      /* the 250 s countdown runs */
 bool ui_calibration_due(void);  /* true once, when the countdown has ended */
 

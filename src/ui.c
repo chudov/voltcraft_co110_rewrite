@@ -13,6 +13,7 @@
 #define MENU_TIMEOUT_MS 60000
 #define CALI_SECONDS 250
 #define ITEM_COUNT 6
+#define CALI_MSG_MS 3000
 
 struct ui_data co110_ud;
 
@@ -28,6 +29,8 @@ static int64_t last_input;
 static bool cali_running;
 static bool cali_due;
 static int64_t cali_end;
+static enum ui_cali_msg cali_msg;
+static int64_t cali_msg_end;
 
 static int c_to_f(int c) { return c * 9 / 5 + 320; }
 static int f_to_c(int f) { return ((f - 320) * 5 + (f >= 320 ? 4 : -4)) / 9; }
@@ -36,6 +39,17 @@ static int t_corrected(void) { return co110_ud.t_raw + g_set.temp_offset; }
 static int rh_corrected(void) { return CLAMP(co110_ud.rh_raw + g_set.rh_offset, 0, 99); }
 
 bool ui_calibrating(void) { return cali_running; }
+
+void ui_show_cali_result(bool ok, int64_t now)
+{
+	cali_msg = ok ? UI_CALI_MSG_DONE : UI_CALI_MSG_FAIL;
+	cali_msg_end = now + CALI_MSG_MS;
+}
+
+enum ui_cali_msg ui_cali_message(int64_t now)
+{
+	return (cali_msg != UI_CALI_MSG_NONE && now < cali_msg_end) ? cali_msg : UI_CALI_MSG_NONE;
+}
 
 bool ui_calibration_due(void)
 {
@@ -503,6 +517,8 @@ void ui_render(int64_t now)
 		} else {
 			disp_blank_co2();
 		}
+	} else if (st == UI_MAIN && ui_cali_message(now) != UI_CALI_MSG_NONE) {
+		disp_co2_text(ui_cali_message(now) == UI_CALI_MSG_DONE ? "donE" : "FAIL");
 	} else if (co110_ud.co2_error) {
 		disp_co2(0, DISP_CO2_ERROR);
 	} else if (!co110_ud.co2_valid) {

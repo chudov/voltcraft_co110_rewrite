@@ -13,6 +13,7 @@ enum msg_type {
 	MSG_CO2_LOST,       /* no valid CO2 frame for 40 polls, the sensor is being power cycled */
 	MSG_BACKLIGHT_OFF,  /* 63 s timer expired */
 	MSG_ALARM_BEEP,     /* periodic alarm beep timer */
+	MSG_CALI_RESULT,    /* a = 1: the 400 ppm calibration was accepted, 0: the sensor did not confirm it */
 };
 
 struct msg {

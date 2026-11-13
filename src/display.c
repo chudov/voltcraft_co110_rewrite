@@ -20,6 +20,11 @@ static uint8_t glyph(char c)
 	case 'E': return 0x79;
 	case 'L': return 0x38;
 	case 'H': return 0x76;
+	case 'F': return 0x71;
+	case 'A': return 0x77;
+	case 'd': return 0x5E;
+	case 'o': return 0x5C;
+	case 'n': return 0x54;
 	case 'I': return 0x30;
 	default:  return 0x00;
 	}
@@ -74,6 +79,16 @@ void disp_co2(int ppm, enum disp_co2_mode mode)
 			ppm = 0;
 		}
 		put_uint(lcd_digits_co2, 4, MIN(ppm, 9999), 1, -1);
+	}
+	lcd_set(LCD_SYM_CO2, true);
+	lcd_set(LCD_SYM_PP, true);
+	lcd_set(LCD_SYM_M, true);
+}
+
+void disp_co2_text(const char text[4])
+{
+	for (int i = 0; i < 4; i++) {
+		put_char(lcd_digits_co2[i], text[i], false);
 	}
 	lcd_set(LCD_SYM_CO2, true);
 	lcd_set(LCD_SYM_PP, true);
