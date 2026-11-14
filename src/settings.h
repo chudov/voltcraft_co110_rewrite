@@ -30,4 +30,8 @@ bool co110_storage_get(const char *key, void *buf, size_t len);
 void co110_storage_put(const char *key, const void *buf, size_t len);
 void co110_storage_delete(const char *key);
 
+/* calls cb for every item below "<prefix>/"; key is the rest of the name, buf holds the value (len <= 16) */
+typedef void (*co110_storage_cb)(const char *key, const void *buf, size_t len, void *user);
+void co110_storage_foreach(const char *prefix, co110_storage_cb cb, void *user);
+
 #endif

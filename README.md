@@ -73,8 +73,21 @@ The first key on a dark screen only wakes the backlight. 60 s without a key leav
 * The CMake warning "No SOURCES given to Zephyr library: drivers__led" is harmless: the LED driver is in the application, not in Zephyr's drivers/led.
 
 ## Storage
-Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with the Zephyr settings subsystem (NVS backend, one key per item under `co110/`) in the last 32 KB of flash (`storage_partition`, 0x08038000, board dts).
-Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_SETTINGS`, `CONFIG_SETTINGS_NVS`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
+Settings and the chart history of the 5 min, 2 h and 12 h levels are kept with the Zephyr settings subsystem (NVS backend,
+items under `co110/`) in the last 32 KB of flash (`storage_partition`, 0x08038000, 16 sectors of 2 KB). All 16 sectors are
+used (`CONFIG_SETTINGS_NVS_SECTOR_COUNT=16`), so the erase cycles are spread over the whole partition.
+
+The history is a ring of 17 small records per level (`co110/hist/<level>_<slot>`, 8 bytes: sequence number, CO2, RH,
+temperature; the newest slot is the one with the highest sequence number). A step writes one record, 16 bytes of flash
+(8 byte record + 8 byte NVS entry; NVS stores every item in units of 8 bytes, so smaller values would not save anything).
+Estimated load: about 5 KB of flash per day, which is roughly 0.2 sector erases per sector per day, so the 10,000 erase
+cycles of the flash last for decades. (The original firmware: 2 pages per level, one erase of each page about every 10.7 h
+for the 5 min level, about 12 years.)
+Items of the earlier blob format (`co110/hist1..3`) are ignored; a full flash erase removes them.
+
+When `CONFIG_SETTINGS_NVS_SECTOR_COUNT` is changed on a device that has been used, erase the flash once
+(`STM32_Programmer_CLI -c port=SWD freq=480 -e all`), the old layout of the partition is not valid for the new one.
+Needed in `prj.conf`: `CONFIG_FLASH`, `CONFIG_FLASH_MAP`, `CONFIG_NVS`, `CONFIG_SETTINGS`, `CONFIG_SETTINGS_NVS`, `CONFIG_SETTINGS_NVS_SECTOR_COUNT=16`, `CONFIG_SETTINGS_NVS_NAME_CACHE`, `CONFIG_MPU_ALLOW_FLASH_WRITE`.
 
 Board peripherals as standard Zephyr devices: LEDs (LED API, `led_swpwm.c`), buzzer (buzzer API), LCD backlight (`gpio-leds` node, `backlight.h`), CM1106S (own sensor driver `src/cm1106s.c` + binding `dts/bindings/cubic,cm1106s.yaml`: sensor API `SENSOR_CHAN_CO2`, calibration via `SENSOR_ATTR_CALIBRATION` (400 to 1500 ppm), ABC settings, serial number and software version via `src/cm1106s.h`, protocol from the datasheet CM1106S-W V0.1; its `vin-supply` is the `regulator-fixed` node, switched by PM resume/suspend), PC13 and PA2 (`gpio-hog` nodes in the board dts, purpose unknown). The touch keys use the input subsystem (`gpio-keys` node `keys` + `zephyr,input-longpress` node `longpress` in the board dts, callbacks in `src/input.c`; UP/DOWN auto repeat and the UP+DOWN chord are application code). The LCD bit-bang pins are still plain GPIOs in the `zephyr,user` node.
 
@@ -111,6 +124,10 @@ Nothing is damaged; the original firmware is in `co110_flash_full.bin`.
 Zephyr task watchdog (`src/watchdog.c`) on the IWDG (`&iwdg` enabled in the board dts, `CONFIG_WATCHDOG`,
 `CONFIG_TASK_WDT`, `CONFIG_TASK_WDT_HW_FALLBACK`). The UI thread (3 s), the SHT30 thread (15 s) and the
 CM1106S thread (20 s) each feed their own channel once per loop; a stuck thread or a hung system resets the device.
+
+## Unit tests (`tests/history`)
+The flash ring of the chart history (`src/history.c`: restore after a power cycle, wrap around, sequence wrap, broken
+chain) is tested with a RAM storage: `west build -b native_sim tests/history -p auto -t run`.
 
 ## Unit tests (`tests/logic`)
 Alarm zones, the UI state machine and the start-up sequence run without hardware (the display, settings,

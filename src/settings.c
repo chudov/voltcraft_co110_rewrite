@@ -201,6 +201,31 @@ bool co110_storage_get(const char *key, void *buf, size_t len)
 	return c.ok;
 }
 
+struct each_ctx {
+	co110_storage_cb cb;
+	void *user;
+};
+
+static int each_cb(const char *key, size_t len, settings_read_cb read_cb, void *cb_arg, void *param)
+{
+	struct each_ctx *c = param;
+	uint8_t buf[16];
+
+	if (key != NULL && len <= sizeof(buf) && read_cb(cb_arg, buf, len) == (ssize_t)len) {
+		c->cb(key, buf, len, c->user);
+	}
+	return 0;
+}
+
+void co110_storage_foreach(const char *prefix, co110_storage_cb cb, void *user)
+{
+	struct each_ctx c = { .cb = cb, .user = user };
+
+	if (ready) {
+		(void)settings_load_subtree_direct(prefix, each_cb, &c);
+	}
+}
+
 void co110_storage_put(const char *key, const void *buf, size_t len)
 {
 	if (ready) {
