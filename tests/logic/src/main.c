@@ -4,6 +4,7 @@
 #include "startup.h"
 #include "settings.h"
 #include "leds.h"
+#include "chart_level.h"
 
 extern int stub_save_count;
 extern int stub_reset_count;
@@ -348,3 +349,32 @@ ZTEST(startup, test_sequence)
 	zassert_false(startup_active());
 	zassert_equal(stub_leds, 0);
 }
+
+/* chart scale of the original (divisor 8.0 read from the flash image) */
+#if CHART_STEPS == 8
+ZTEST(chart, test_level_scale)
+{
+	zassert_equal(co110_chart_level(0, 800, -1), 0);   /* below the scale */
+	zassert_equal(co110_chart_level(0, 800, 0), 1);    /* the minimum is the lowest segment */
+	zassert_equal(co110_chart_level(0, 800, 99), 1);
+	zassert_equal(co110_chart_level(0, 800, 100), 2);  /* step boundaries belong to the lower step */
+	zassert_equal(co110_chart_level(0, 800, 101), 2);
+	zassert_equal(co110_chart_level(0, 800, 200), 2);
+	zassert_equal(co110_chart_level(0, 800, 201), 3);
+	zassert_equal(co110_chart_level(0, 800, 700), 7);
+	zassert_equal(co110_chart_level(0, 800, 701), 8);
+	zassert_equal(co110_chart_level(0, 800, 800), 8);  /* the maximum */
+	zassert_equal(co110_chart_level(400, 1500, 1000), 5); /* the 1000 ppm mark in between: arrows up to its row */
+}
+
+#endif
+
+ZTEST(chart, test_level_special_cases)
+{
+	zassert_equal(co110_chart_level(0, 0, 0), 8);      /* empty chart or equal values: all segments */
+	zassert_equal(co110_chart_level(500, 500, 500), 8);
+	zassert_equal(co110_chart_level(400, 900, 1000), 8);   /* the 1000 ppm mark above all data */
+	zassert_equal(co110_chart_level(1100, 1900, 1000), 0); /* below all data: no row arrow */
+}
+
+ZTEST_SUITE(chart, NULL, NULL, NULL, NULL, NULL);

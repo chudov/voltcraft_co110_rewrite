@@ -72,6 +72,7 @@ typedef struct {
 #define LCD_SYM_MINUS1M        38, 2
 #define LCD_SYM_MINUS1W        38, 3
 #define LCD_SYM_ARROWS_LR      38, 7
+#define LCD_ROW_ARROWS_BYTE 26
 #define LCD_ROW_ARROW(row)  26, (row) /* arrows left of the dot field, row 0 = bottom */
 
 /* 17 x 8 dot field: column x = 0 (left) .. 16 (right), row y = 0 (bottom) .. 7.

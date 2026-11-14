@@ -9,6 +9,7 @@ target_sources(app PRIVATE
   src/main.c
   src/stubs.c
   ${SRC}/alarm.c
+  ${SRC}/chart_level.c
   ${SRC}/ui.c
   ${SRC}/startup.c)
 target_include_directories(app PRIVATE ${SRC})

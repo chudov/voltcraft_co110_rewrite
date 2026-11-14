@@ -62,10 +62,10 @@ void disp_blank_temp(void) {}
 void disp_blank_rh(void) {}
 void disp_temp(int tenths, bool f) { ARG_UNUSED(tenths); ARG_UNUSED(f); }
 void disp_rh(int percent) { ARG_UNUSED(percent); }
-void disp_chart(const int *v, int count, enum disp_quantity q, bool f, int sel, bool hide)
+void disp_chart(const int *v, int count, enum disp_quantity q, bool f, int sel, bool hide, bool cyc)
 {
 	ARG_UNUSED(v); ARG_UNUSED(count); ARG_UNUSED(q); ARG_UNUSED(f); ARG_UNUSED(sel);
-	ARG_UNUSED(hide);
+	ARG_UNUSED(hide); ARG_UNUSED(cyc);
 }
 void disp_log_cursor(bool on) { ARG_UNUSED(on); }
 void disp_zoom(int z) { ARG_UNUSED(z); }

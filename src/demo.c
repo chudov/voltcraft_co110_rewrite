@@ -89,7 +89,7 @@ int main(void)
 		disp_co2(co2, DISP_CO2_VALUE);
 		disp_temp(235, fahrenheit);
 		disp_rh(45);
-		disp_chart(hist, DISP_CHART_COLS, quantity, fahrenheit, 5, blink);
+		disp_chart(hist, DISP_CHART_COLS, quantity, fahrenheit, 5, blink, false);
 		disp_zoom(zoom);
 		disp_menu(menu);
 		disp_alarm(true, muted);

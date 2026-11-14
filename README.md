@@ -52,7 +52,7 @@ Restore the original firmware at any time (keep `co110_flash_full.bin`!):
 | Key | Main screen | In the menu |
 |---|---|---|
 | UP | next chart zoom (5 s, 5 min, 2 h, 12 h per division) | previous item / change value |
-| DOWN | next chart quantity (CO2, RH, temperature, then a 4th state: the three charts change automatically every 10 s, starting with temperature; one more DOWN returns to CO2) | next item / change value |
+| DOWN | next chart quantity (CO2, RH, temperature, then a 4th state: the three charts change automatically every 10 s, starting with temperature; one more DOWN returns to CO2; the CYCLE symbol is lit in this state) | next item / change value |
 | MENU short | open menu | next item, after the last one leave; cancel an edit |
 | MENU long (6 s) | calibrate temperature and humidity offsets | - |
 | ENTER | - | open item / store the edited value |

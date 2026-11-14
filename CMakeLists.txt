@@ -8,7 +8,7 @@ list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(co110)
 
-target_sources(app PRIVATE src/lcd.c src/display.c)
+target_sources(app PRIVATE src/lcd.c src/display.c src/chart_level.c)
 target_include_directories(app PRIVATE src)
 
 if(CONFIG_APP_BITMAP_TEST)

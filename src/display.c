@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <zephyr/sys/util.h>
 #include "display.h"
+#include "chart_level.h"
 #include "lcd.h"
 #include "lcd_map.h"
 
@@ -112,8 +113,8 @@ void disp_co2_countdown(int n)
 	lcd_set(LCD_SYM_M, true);
 }
 
-/* start-up countdown frame of the original: the two digits without CO2 / ppm legend, all row arrows,
- * the CO2, CHART and ppm markers of the top line and the MIN / MAX arrows on, MIN and MAX show 0 */
+/* start-up countdown frame of the original: the two digits without the CO2 / ppm legend, below an
+ * empty CO2 chart (MIN and MAX 0, all row arrows, CO2, CHART and ppm markers, MIN/MAX arrows) */
 void disp_startup_countdown(int n)
 {
 	n = CLAMP(n, 0, 99);
@@ -121,15 +122,7 @@ void disp_startup_countdown(int n)
 	put_char(lcd_digits_co2[1], n >= 10 ? '0' + n / 10 : ' ', false);
 	put_char(lcd_digits_co2[2], '0' + n % 10, false);
 	put_char(lcd_digits_co2[3], ' ', false);
-	put_uint(lcd_digits_min, 3, 0, 1, -1);
-	put_uint(lcd_digits_max, 3, 0, 1, -1);
-	for (int row = 0; row < 8; row++) {
-		lcd_set(LCD_ROW_ARROW(row), true);
-	}
-	lcd_set(LCD_SYM_CO2_TOP, true);
-	lcd_set(LCD_SYM_CHART_TOP, true);
-	lcd_set(LCD_SYM_MINMAX_ARROWS, true);
-	lcd_set(LCD_SYM_PPM_TOP, true);
+	disp_chart(NULL, 0, DISP_Q_CO2, false, -1, false, false);
 }
 
 void disp_blank_co2(void)
@@ -218,13 +211,20 @@ static void put_minmax(const lcd_seg_t d[][8], int v, enum disp_quantity q,
 	lcd_set(one_byte, one_bit, one);
 }
 
+/* The value of the row arrows (left of the dot field): the original always draws the 1000 ppm mark,
+ * for every quantity, with the scale of the chart */
+#define ROW_ARROW_VALUE 1000
+
 void disp_chart(const int *values, int count, enum disp_quantity q,
-		bool fahrenheit, int selected_col, bool hide_selected)
+		bool fahrenheit, int selected_col, bool hide_selected, bool cycle)
 {
 	int vmin = 0, vmax = 0;
 
 	if (count > DISP_CHART_COLS) {
 		count = DISP_CHART_COLS;
+	}
+	if (count < 0) {
+		count = 0;
 	}
 	for (int c = 0; c < count; c++) {
 		if (c == 0 || values[c] < vmin) {
@@ -241,41 +241,27 @@ void disp_chart(const int *values, int count, enum disp_quantity q,
 	}
 	/* column 0 = newest sample at the right edge (x = 16) */
 	for (int c = 0; c < count; c++) {
-		int level = 1;
+		int level = co110_chart_level(vmin, vmax, values[c]);
 
-		if (vmax > vmin) {
-			level = 1 + ((values[c] - vmin) * 7 + (vmax - vmin) / 2) / (vmax - vmin);
-		}
 		if (hide_selected && c == selected_col) {
 			level = 0;
 		}
 		lcd_fb[LCD_DOT_BYTE(16 - c)] = (uint8_t)((1u << level) - 1u);
 	}
+	/* row arrows: lit from the bottom up to the row of the 1000 ppm mark */
+	lcd_fb[LCD_ROW_ARROWS_BYTE] = (uint8_t)((1u << co110_chart_level(vmin, vmax, ROW_ARROW_VALUE)) - 1u);
 
-	/* quantity marker on the top line; CHART is on all the time after the start-up */
+	/* markers of the top line; CHART is on all the time, CYCLE while the charts change automatically */
 	lcd_set(LCD_SYM_CHART_TOP, true);
+	lcd_set(LCD_SYM_CYCLE, cycle);
 	lcd_set(LCD_SYM_CO2_TOP, q == DISP_Q_CO2);
 	lcd_set(LCD_SYM_RH_TOP, q == DISP_Q_RH);
 	lcd_set(LCD_SYM_TEMP_TOP, q == DISP_Q_TEMP);
 
-	if (count == 0) { /* nothing to show: no MIN / MAX */
-		for (int i = 0; i < 3; i++) {
-			put_char(lcd_digits_min[i], ' ', false);
-			put_char(lcd_digits_max[i], ' ', false);
-		}
-		lcd_set(LCD_MIN_ONE, false);
-		lcd_set(LCD_MAX_ONE, false);
-		lcd_set(LCD_MIN_X10, false);
-		lcd_set(LCD_MAX_X10, false);
-		lcd_set(LCD_SYM_MINMAX_ARROWS, false);
-		lcd_set(LCD_SYM_PPM_TOP, q == DISP_Q_CO2);
-		return;
-	}
-
-	/* MIN / MAX numbers and their unit markers */
+	/* MIN / MAX numbers (0 and 0 for an empty chart) and their unit markers, arrows always on */
 	put_minmax(lcd_digits_min, vmin, q, LCD_MIN_X10, LCD_MIN_ONE);
 	put_minmax(lcd_digits_max, vmax, q, LCD_MAX_X10, LCD_MAX_ONE);
-	lcd_set(LCD_SYM_MINMAX_ARROWS, count > 0);
+	lcd_set(LCD_SYM_MINMAX_ARROWS, true);
 	lcd_set(LCD_SYM_PPM_TOP, q == DISP_Q_CO2);
 	lcd_set(LCD_MM_PERCENT, q == DISP_Q_RH);
 	lcd_set(LCD_MM_DEG, q == DISP_Q_TEMP);

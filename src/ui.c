@@ -584,7 +584,7 @@ void ui_render(int64_t now)
 		chart[c] = (quantity == DISP_Q_TEMP && unit) ? c_to_f(v) : v;
 	}
 	disp_chart(chart, co110_ud.hist_count[zoom], quantity, unit, st == UI_LOG ? sel : -1,
-		   st == UI_LOG && blink);
+		   st == UI_LOG && blink, auto_cycle);
 	disp_zoom(zoom);
 
 	/* LOG: show the selected sample in the field of the chosen quantity */
